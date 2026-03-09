@@ -76,3 +76,4 @@ coverage/
 
 /build/app/outputs/flutter-apk/app-release.apk
 /build/app/outputs/flutter-apk/app-debug.apk
+task.md.resolved
