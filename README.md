@@ -25,3 +25,6 @@ Your private daily OS. A comprehensive personal productivity app with no account
 - All data stored locally on your device
 - No tracking, no analytics
 
+## License
+
+MIT License - see LICENSE file for details
