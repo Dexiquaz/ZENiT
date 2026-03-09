@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task_model.dart';
+import '../providers/todo_provider.dart';
+import '../../../shared/utils/time_picker_helper.dart';
 
-class TaskDetailDialog extends StatefulWidget {
+class TaskDetailDialog extends ConsumerStatefulWidget {
   final Task? task;
   final int? initialProjectId;
 
   const TaskDetailDialog({super.key, this.task, this.initialProjectId});
 
   @override
-  State<TaskDetailDialog> createState() => _TaskDetailDialogState();
+  ConsumerState<TaskDetailDialog> createState() => _TaskDetailDialogState();
 }
 
-class _TaskDetailDialogState extends State<TaskDetailDialog> {
+class _TaskDetailDialogState extends ConsumerState<TaskDetailDialog> {
   late final TextEditingController _titleController;
   late TaskPriority _priority;
   DateTime? _dueDate;
   bool _remindAtDeadline = false;
+  int? _selectedProjectId;
 
   @override
   void initState() {
@@ -24,10 +28,13 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
     _priority = widget.task?.priority ?? TaskPriority.low;
     _dueDate = widget.task?.dueDate;
     _remindAtDeadline = widget.task?.reminderAt != null;
+    _selectedProjectId = widget.task?.projectId ?? widget.initialProjectId;
   }
 
   @override
   Widget build(BuildContext context) {
+    final projects = ref.watch(projectListProvider);
+
     return AlertDialog(
       title: Text(widget.task == null ? 'NEW TASK' : 'EDIT TASK'),
       content: SingleChildScrollView(
@@ -44,16 +51,69 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
               autofocus: widget.task == null,
             ),
             const SizedBox(height: 24),
+            Text('CATEGORY', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            projects.when(
+              data: (projectList) {
+                return DropdownButtonFormField<int?>(
+                  initialValue: _selectedProjectId,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                  ),
+                  hint: const Text('NO CATEGORY'),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('NO CATEGORY'),
+                    ),
+                    ...projectList.map(
+                      (project) => DropdownMenuItem<int?>(
+                        value: project.id,
+                        child: Text(project.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedProjectId = value;
+                    });
+                  },
+                );
+              },
+              loading: () => const CircularProgressIndicator(),
+              error: (_, __) => const Text('Error loading categories'),
+            ),
+            const SizedBox(height: 24),
             Text('PRIORITY', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
-            SegmentedButton<TaskPriority>(
-              segments: const [
-                ButtonSegment(value: TaskPriority.low, label: Text('LOW')),
-                ButtonSegment(value: TaskPriority.medium, label: Text('MED')),
-                ButtonSegment(value: TaskPriority.high, label: Text('HIGH')),
-              ],
-              selected: {_priority},
-              onSelectionChanged: (v) => setState(() => _priority = v.first),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<TaskPriority>(
+                showSelectedIcon: false,
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: WidgetStatePropertyAll(
+                    Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                  ),
+                ),
+                segments: const [
+                  ButtonSegment(value: TaskPriority.low, label: Text('LOW')),
+                  ButtonSegment(value: TaskPriority.medium, label: Text('MED')),
+                  ButtonSegment(value: TaskPriority.high, label: Text('HIGH')),
+                ],
+                selected: {_priority},
+                onSelectionChanged: (v) => setState(() => _priority = v.first),
+              ),
             ),
             const SizedBox(height: 24),
             Text('DEADLINE', style: Theme.of(context).textTheme.labelLarge),
@@ -86,6 +146,8 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       _dueDate == null
                           ? 'SELECT DATE'
                           : '${_dueDate!.year}.${_dueDate!.month.toString().padLeft(2, '0')}.${_dueDate!.day.toString().padLeft(2, '0')}',
+                      overflow: TextOverflow.visible,
+                      softWrap: false,
                     ),
                   ),
                 ),
@@ -94,7 +156,7 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
-                        final time = await showTimePicker(
+                        final time = await showZenitTimePicker(
                           context: context,
                           initialTime: TimeOfDay.fromDateTime(
                             _dueDate ?? DateTime.now(),
@@ -115,6 +177,8 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                       icon: const Icon(Icons.access_time, size: 18),
                       label: Text(
                         '${_dueDate!.hour.toString().padLeft(2, '0')}:${_dueDate!.minute.toString().padLeft(2, '0')}',
+                        overflow: TextOverflow.visible,
+                        softWrap: false,
                       ),
                     ),
                   ),
@@ -155,13 +219,14 @@ class _TaskDetailDialogState extends State<TaskDetailDialog> {
                     priority: _priority,
                     dueDate: _dueDate,
                     reminderAt: _remindAtDeadline ? _dueDate : null,
+                    projectId: _selectedProjectId,
                   ) ??
                   Task(
                     title: _titleController.text,
                     priority: _priority,
                     dueDate: _dueDate,
                     reminderAt: _remindAtDeadline ? _dueDate : null,
-                    projectId: widget.initialProjectId,
+                    projectId: _selectedProjectId,
                     createdAt: DateTime.now(),
                   );
               Navigator.pop(context, result);

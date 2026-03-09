@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/habit.dart';
 import '../providers/habit_provider.dart';
+import '../../../shared/utils/time_picker_helper.dart';
 
 class AddHabitDialog extends ConsumerStatefulWidget {
   const AddHabitDialog({super.key});
@@ -204,11 +205,6 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
 
     if (!context.mounted) return null;
 
-    return showTimePicker(
-      context: context,
-      initialTime: _reminderTime,
-      initialEntryMode: TimePickerEntryMode.dialOnly,
-      useRootNavigator: true,
-    );
+    return showZenitTimePicker(context: context, initialTime: _reminderTime);
   }
 }

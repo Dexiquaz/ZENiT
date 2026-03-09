@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/database_helper.dart';
+import '../../../shared/utils/time_picker_helper.dart';
 import '../../habit_tracker/providers/habit_provider.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../../finance/providers/finance_provider.dart';
@@ -335,21 +336,9 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     WidgetRef ref,
     UserSettings settings,
   ) async {
-    final selected = await showTimePicker(
+    final selected = await showZenitTimePicker(
       context: context,
       initialTime: settings.journalReminderTime,
-      initialEntryMode: TimePickerEntryMode.dialOnly,
-      builder: (context, child) {
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            alwaysUse24HourFormat: _use24HourFormat(
-              context,
-              settings.reminderTimeFormat,
-            ),
-          ),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
     );
 
     if (selected == null) return;

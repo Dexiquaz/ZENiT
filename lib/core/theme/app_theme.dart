@@ -158,7 +158,7 @@ class AppTheme {
       timePickerTheme: TimePickerThemeData(
         backgroundColor: surface,
         dialBackgroundColor: AppColors.elevated,
-        dialHandColor: primary,
+        dialHandColor: primary.withValues(alpha: 0.7), // More subtle hand
         hourMinuteColor: AppColors.elevated,
         hourMinuteTextColor: AppColors.textPrimary,
         dayPeriodColor: AppColors.elevated,

@@ -29,7 +29,7 @@ class DashboardView extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -349,7 +349,9 @@ class _ModuleButton extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: InkWell(
-        onTap: onTap,
+        onTap:
+            onTap ??
+            (navigationPath != null ? () => context.go(navigationPath!) : null),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(20.0),
@@ -431,39 +433,6 @@ class _ModuleButton extends StatelessWidget {
                   ),
                 ],
               ),
-              if (navigationPath != null) ...[
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => context.go(navigationPath!),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'OPEN',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_forward, size: 14),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ),
         ),
