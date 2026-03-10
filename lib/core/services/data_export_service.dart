@@ -29,8 +29,13 @@ class DataExportService {
   final _db = DatabaseHelper();
 
   /// Export all data to a JSON file.
+  /// If [customDirectoryPath] is provided, saves to that directory.
+  /// Otherwise, saves to the default Documents directory.
   /// Returns the file path on success, null on error.
-  Future<String?> exportToJson({Map<String, dynamic>? settings}) async {
+  Future<String?> exportToJson({
+    Map<String, dynamic>? settings,
+    String? customDirectoryPath,
+  }) async {
     try {
       // Gather all data
       final habits = await _db.getHabits();
@@ -59,10 +64,21 @@ class DataExportService {
         },
       };
 
-      // Write to file
-      final directory = await getApplicationDocumentsDirectory();
+      // Determine target directory
+      late Directory targetDirectory;
+      if (customDirectoryPath != null && customDirectoryPath.isNotEmpty) {
+        targetDirectory = Directory(customDirectoryPath);
+        // Ensure directory exists
+        if (!await targetDirectory.exists()) {
+          await targetDirectory.create(recursive: true);
+        }
+      } else {
+        targetDirectory = await getApplicationDocumentsDirectory();
+      }
+
+      // Write to file with timestamp
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final file = File('${directory.path}/zenit_export_$timestamp.json');
+      final file = File('${targetDirectory.path}/zenit_export_$timestamp.json');
 
       await file.writeAsString(
         const JsonEncoder.withIndent('  ').convert(exportData),

@@ -539,33 +539,82 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   }
 
   Future<void> _exportDataJson(BuildContext context, WidgetRef ref) async {
+    // Let user pick a directory
+    final selectedDirectory = await FilePicker.platform.getDirectoryPath();
+
+    if (selectedDirectory == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Export cancelled. No directory selected.'),
+            backgroundColor: Colors.blueGrey,
+          ),
+        );
+      }
+      return;
+    }
+
     final exportService = DataExportService();
     final settingsMap = await ref
         .read(settingsProvider.notifier)
         .exportBackupMap();
 
-    // Show loading
     if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
 
-    final filePath = await exportService.exportToJson(settings: settingsMap);
-
-    if (!context.mounted) return;
-    Navigator.pop(context); // Dismiss loading
-
-    if (filePath != null) {
-      _showExportResultDialog(context, filePath, 'JSON');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Export failed. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
+    try {
+      // Show loading dialog
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
+
+      final filePath = await exportService.exportToJson(
+        settings: settingsMap,
+        customDirectoryPath: selectedDirectory,
+      );
+      if (!context.mounted) return;
+
+      // Allow Navigator to process dialog state before popping
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (filePath != null) {
+        _showExportResultDialog(context, filePath, 'JSON');
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Export failed. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+
+      // Allow Navigator to process dialog state before popping
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (!context.mounted) return;
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {
+        // Dialog might have already been dismissed
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -688,37 +737,75 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
-    final exportService = DataExportService();
-    final result = await exportService.importFromJsonDetailed(filePath);
+    try {
+      final exportService = DataExportService();
+      final result = await exportService.importFromJsonDetailed(filePath);
 
-    if (!context.mounted) return;
-    Navigator.pop(context); // Dismiss loading
+      if (!context.mounted) return;
 
-    if (result.success) {
-      if (result.settings != null) {
-        await ref
-            .read(settingsProvider.notifier)
-            .applyBackupMap(result.settings!);
-        if (!context.mounted) return;
+      // Allow Navigator to process dialog state before popping
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+
+      if (result.success) {
+        if (result.settings != null) {
+          await ref
+              .read(settingsProvider.notifier)
+              .applyBackupMap(result.settings!);
+          if (!context.mounted) return;
+        }
+
+        // Force all providers to reload
+        ref.invalidate(habitListProvider);
+        ref.invalidate(projectListProvider);
+        ref.invalidate(taskListProvider);
+        ref.invalidate(transactionListProvider);
+        ref.invalidate(noteListProvider);
+        ref.invalidate(shoppingListProvider);
+        ref.invalidate(journalProvider);
+        ref.invalidate(zenTimerProvider);
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+
+      // Allow Navigator to process dialog state before popping
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (!context.mounted) return;
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {
+        // Dialog might have already been dismissed
       }
 
-      // Force all providers to reload
-      ref.invalidate(habitListProvider);
-      ref.invalidate(projectListProvider);
-      ref.invalidate(taskListProvider);
-      ref.invalidate(transactionListProvider);
-      ref.invalidate(noteListProvider);
-      ref.invalidate(shoppingListProvider);
-      ref.invalidate(journalProvider);
-      ref.invalidate(zenTimerProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.green),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message), backgroundColor: Colors.red),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Import error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
