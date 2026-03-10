@@ -47,6 +47,41 @@ class UserSettings {
       breakDurationMinutes: breakDurationMinutes ?? this.breakDurationMinutes,
     );
   }
+
+  Map<String, dynamic> toBackupMap() {
+    return {
+      'currency': currency,
+      'journalPromptEnabled': journalPromptEnabled,
+      'journalReminderHour': journalReminderHour,
+      'journalReminderMinute': journalReminderMinute,
+      'reminderTimeFormat': reminderTimeFormat.name,
+      'focusDurationMinutes': focusDurationMinutes,
+      'breakDurationMinutes': breakDurationMinutes,
+    };
+  }
+
+  factory UserSettings.fromBackupMap(Map<String, dynamic> map) {
+    final formatRaw = map['reminderTimeFormat']?.toString();
+    final reminderTimeFormat = switch (formatRaw) {
+      'h12' => ReminderTimeFormat.h12,
+      'h24' => ReminderTimeFormat.h24,
+      _ => ReminderTimeFormat.system,
+    };
+
+    final focus = (map['focusDurationMinutes'] as num?)?.toInt() ?? 25;
+    final rest = (map['breakDurationMinutes'] as num?)?.toInt() ?? 5;
+
+    return UserSettings(
+      currency: (map['currency'] as String?) ?? r'$',
+      journalPromptEnabled: (map['journalPromptEnabled'] as bool?) ?? true,
+      journalReminderHour: (map['journalReminderHour'] as num?)?.toInt() ?? 21,
+      journalReminderMinute:
+          (map['journalReminderMinute'] as num?)?.toInt() ?? 0,
+      reminderTimeFormat: reminderTimeFormat,
+      focusDurationMinutes: focus.clamp(1, 60).toInt(),
+      breakDurationMinutes: rest.clamp(1, 30).toInt(),
+    );
+  }
 }
 
 final settingsProvider = AsyncNotifierProvider<SettingsNotifier, UserSettings>(
@@ -166,6 +201,36 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
     final defaults = UserSettings();
     state = AsyncData(defaults);
     await _syncJournalPrompt(defaults);
+  }
+
+  Future<Map<String, dynamic>> exportBackupMap() async {
+    final current = state.hasValue ? state.value! : await future;
+    return current.toBackupMap();
+  }
+
+  Future<void> applyBackupMap(Map<String, dynamic> map) async {
+    final restored = UserSettings.fromBackupMap(map);
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString(_currencyKey, restored.currency);
+    await prefs.setBool(
+      _journalPromptEnabledKey,
+      restored.journalPromptEnabled,
+    );
+    await prefs.setInt(_journalReminderHourKey, restored.journalReminderHour);
+    await prefs.setInt(
+      _journalReminderMinuteKey,
+      restored.journalReminderMinute,
+    );
+    await prefs.setString(
+      _reminderTimeFormatKey,
+      restored.reminderTimeFormat.name,
+    );
+    await prefs.setInt(_focusDurationMinutesKey, restored.focusDurationMinutes);
+    await prefs.setInt(_breakDurationMinutesKey, restored.breakDurationMinutes);
+
+    state = AsyncData(restored);
+    await _syncJournalPrompt(restored);
   }
 
   ReminderTimeFormat _parseTimeFormat(String? raw) {
