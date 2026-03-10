@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/services/data_export_service.dart';
 import '../../../core/utils/database_helper.dart';
 import '../../../shared/utils/time_picker_helper.dart';
 import '../../habit_tracker/providers/habit_provider.dart';
@@ -21,11 +23,14 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   NotificationPermissionStatus _permissionStatus =
       NotificationPermissionStatus.unknown;
   bool _checkingPermission = true;
+  bool _canScheduleExactAlarms = false;
+  bool _checkingExactAlarms = true;
 
   @override
   void initState() {
     super.initState();
     _refreshPermissionStatus();
+    _refreshExactAlarmStatus();
   }
 
   Future<void> _refreshPermissionStatus() async {
@@ -35,6 +40,17 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     setState(() {
       _permissionStatus = status;
       _checkingPermission = false;
+    });
+  }
+
+  Future<void> _refreshExactAlarmStatus() async {
+    setState(() => _checkingExactAlarms = true);
+    final canSchedule = await NotificationService.instance
+        .canScheduleExactAlarms();
+    if (!mounted) return;
+    setState(() {
+      _canScheduleExactAlarms = canSchedule;
+      _checkingExactAlarms = false;
     });
   }
 
@@ -48,6 +64,27 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Notification permission: ${_permissionLabel(status)}'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _requestExactAlarmPermission(BuildContext context) async {
+    final granted = await NotificationService.instance
+        .requestExactAlarmPermission();
+    if (!mounted) return;
+
+    await _refreshExactAlarmStatus();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            granted
+                ? 'Exact alarm permission granted'
+                : 'Please enable exact alarms in Settings',
+          ),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -114,6 +151,26 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       }
                     },
                   ),
+                  if (Platform.isAndroid) ...[
+                    const Divider(indent: 56),
+                    _buildListTile(
+                      context,
+                      title: 'Exact Alarm Permission',
+                      subtitle: _checkingExactAlarms
+                          ? 'Checking...'
+                          : _canScheduleExactAlarms
+                          ? 'Enabled (required for precise reminders)'
+                          : 'Tap to enable in Settings',
+                      icon: Icons.alarm_outlined,
+                      onTap: () async {
+                        if (!_canScheduleExactAlarms) {
+                          await _requestExactAlarmPermission(context);
+                        } else {
+                          await _refreshExactAlarmStatus();
+                        }
+                      },
+                    ),
+                  ],
                   const Divider(indent: 56),
                   _buildListTile(
                     context,
@@ -150,6 +207,30 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     title: 'Local-Only Storage',
                     subtitle: 'Data stays on this device unless you export it.',
                     icon: Icons.shield_outlined,
+                  ),
+                  const Divider(indent: 56),
+                  _buildListTile(
+                    context,
+                    title: 'Export Data (JSON)',
+                    subtitle: 'Save all your data to a JSON file.',
+                    icon: Icons.download_outlined,
+                    onTap: () => _exportDataJson(context),
+                  ),
+                  const Divider(indent: 56),
+                  _buildListTile(
+                    context,
+                    title: 'Export Data (CSV)',
+                    subtitle: 'Save all your data to CSV files.',
+                    icon: Icons.table_chart_outlined,
+                    onTap: () => _exportDataCsv(context),
+                  ),
+                  const Divider(indent: 56),
+                  _buildListTile(
+                    context,
+                    title: 'Import Data',
+                    subtitle: 'Restore data from a JSON export file.',
+                    icon: Icons.upload_outlined,
+                    onTap: () => _importData(context, ref),
                   ),
                   const Divider(indent: 56),
                   _buildListTile(
@@ -461,6 +542,231 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
         return false;
       case ReminderTimeFormat.h24:
         return true;
+    }
+  }
+
+  Future<void> _exportDataJson(BuildContext context) async {
+    final exportService = DataExportService();
+
+    // Show loading
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final filePath = await exportService.exportToJson();
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // Dismiss loading
+
+    if (filePath != null) {
+      _showExportResultDialog(context, filePath, 'JSON');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Export failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportDataCsv(BuildContext context) async {
+    final exportService = DataExportService();
+
+    // Show loading
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final dirPath = await exportService.exportToCsv();
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // Dismiss loading
+
+    if (dirPath != null) {
+      _showExportResultDialog(context, dirPath, 'CSV');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Export failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showExportResultDialog(
+    BuildContext context,
+    String path,
+    String format,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Export Successful'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your data has been exported to $format format.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            Text('Location:', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                path,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'You can find this file in your device\'s Documents folder.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importData(BuildContext context, WidgetRef ref) async {
+    // First, show a confirmation dialog with file path input
+    final controller = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import Data'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'WARNING: This will replace all current data with the imported data.',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Enter the full path to your JSON export file:'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: '/storage/emulated/0/Documents/zenit_export_...json',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Tip: You can find exported files in your Documents folder.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('IMPORT'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) {
+      controller.dispose();
+      return;
+    }
+
+    final filePath = controller.text.trim();
+    controller.dispose();
+
+    if (filePath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a file path.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Show loading
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final exportService = DataExportService();
+    final success = await exportService.importFromJson(filePath);
+
+    if (!context.mounted) return;
+    Navigator.pop(context); // Dismiss loading
+
+    if (success) {
+      // Force all providers to reload
+      ref.invalidate(habitListProvider);
+      ref.invalidate(projectListProvider);
+      ref.invalidate(taskListProvider);
+      ref.invalidate(transactionListProvider);
+      ref.invalidate(noteListProvider);
+      ref.invalidate(shoppingListProvider);
+      ref.invalidate(journalProvider);
+      ref.invalidate(zenTimerProvider);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Data imported successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Import failed. Please check the file path and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }

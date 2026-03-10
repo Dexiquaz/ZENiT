@@ -1,0 +1,389 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import '../utils/database_helper.dart';
+import '../../features/habit_tracker/models/habit.dart';
+import '../../features/todo/models/task_model.dart';
+import '../../features/finance/models/transaction_model.dart';
+import '../../features/notes_shopping/models/models.dart';
+
+/// Service for exporting and importing all user data.
+class DataExportService {
+  static final DataExportService _instance = DataExportService._internal();
+  factory DataExportService() => _instance;
+  DataExportService._internal();
+
+  final _db = DatabaseHelper();
+
+  /// Export all data to a JSON file.
+  /// Returns the file path on success, null on error.
+  Future<String?> exportToJson() async {
+    try {
+      // Gather all data
+      final habits = await _db.getHabits();
+      final tasks = await _db.getTasks();
+      final projects = await _db.getProjects();
+      final transactions = await _db.getTransactions();
+      final notes = await _db.getNotes();
+      final shoppingItems = await _db.getShoppingItems();
+
+      // Get all journal entries - need to query by month ranges
+      final now = DateTime.now();
+      final journalEntries = <JournalEntry>[];
+      // Export last 12 months of journal entries
+      for (int i = 0; i < 12; i++) {
+        final date = DateTime(now.year, now.month - i, 1);
+        final entries = await _db.getJournalEntriesForMonth(
+          date.year,
+          date.month,
+        );
+        journalEntries.addAll(entries);
+      }
+
+      // Create export object
+      final exportData = {
+        'version': '1.0',
+        'exportedAt': DateTime.now().toIso8601String(),
+        'data': {
+          'habits': habits.map((h) => h.toMap()).toList(),
+          'tasks': tasks.map((t) => t.toMap()).toList(),
+          'projects': projects
+              .map((p) => {'id': p.id, 'name': p.name})
+              .toList(),
+          'transactions': transactions.map((t) => t.toMap()).toList(),
+          'notes': notes.map((n) => n.toMap()).toList(),
+          'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(),
+          'journalEntries': journalEntries.map((j) => j.toMap()).toList(),
+        },
+      };
+
+      // Write to file
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final file = File('${directory.path}/zenit_export_$timestamp.json');
+
+      await file.writeAsString(
+        const JsonEncoder.withIndent('  ').convert(exportData),
+      );
+
+      return file.path;
+    } catch (e) {
+      debugPrint('Export error: $e');
+      return null;
+    }
+  }
+
+  /// Export all data to CSV format (multiple files in a directory).
+  /// Returns the directory path on success, null on error.
+  Future<String?> exportToCsv() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final exportDir = Directory(
+        '${directory.path}/zenit_csv_export_$timestamp',
+      );
+
+      if (!await exportDir.exists()) {
+        await exportDir.create(recursive: true);
+      }
+
+      // Export habits
+      final habits = await _db.getHabits();
+      await _writeCsvFile(
+        '${exportDir.path}/habits.csv',
+        [
+          'id',
+          'title',
+          'description',
+          'recurrence',
+          'category',
+          'reminder_enabled',
+          'reminder_hour',
+          'reminder_minute',
+          'reminder_weekday',
+          'reminder_day_of_month',
+          'created_at',
+          'completion_dates',
+        ],
+        habits
+            .map(
+              (h) => [
+                h.id?.toString() ?? '',
+                _escapeCsv(h.title),
+                _escapeCsv(h.description),
+                h.recurrence.index.toString(),
+                _escapeCsv(h.category),
+                h.reminderEnabled ? '1' : '0',
+                h.reminderHour?.toString() ?? '',
+                h.reminderMinute?.toString() ?? '',
+                h.reminderWeekday?.toString() ?? '',
+                h.reminderDayOfMonth?.toString() ?? '',
+                h.createdAt.toIso8601String(),
+                _escapeCsv(h.completionDates.join(',')),
+              ],
+            )
+            .toList(),
+      );
+
+      // Export tasks
+      final tasks = await _db.getTasks();
+      await _writeCsvFile(
+        '${exportDir.path}/tasks.csv',
+        [
+          'id',
+          'title',
+          'project_id',
+          'parent_id',
+          'priority',
+          'due_date',
+          'reminder_at',
+          'is_pinned',
+          'completed',
+          'created_at',
+        ],
+        tasks
+            .map(
+              (t) => [
+                t.id?.toString() ?? '',
+                _escapeCsv(t.title),
+                t.projectId?.toString() ?? '',
+                t.parentId?.toString() ?? '',
+                t.priority.toString(),
+                t.dueDate?.toIso8601String() ?? '',
+                t.reminderAt?.toIso8601String() ?? '',
+                t.pinned ? '1' : '0',
+                t.completed ? '1' : '0',
+                t.createdAt.toIso8601String(),
+              ],
+            )
+            .toList(),
+      );
+
+      // Export projects
+      final projects = await _db.getProjects();
+      await _writeCsvFile(
+        '${exportDir.path}/projects.csv',
+        ['id', 'name'],
+        projects.map((p) => [p.id.toString(), _escapeCsv(p.name)]).toList(),
+      );
+
+      // Export transactions
+      final transactions = await _db.getTransactions();
+      await _writeCsvFile(
+        '${exportDir.path}/transactions.csv',
+        ['id', 'description', 'amount', 'category', 'is_income', 'date'],
+        transactions
+            .map(
+              (t) => [
+                t.id?.toString() ?? '',
+                _escapeCsv(t.description),
+                t.amount.toString(),
+                _escapeCsv(t.category),
+                t.isIncome ? '1' : '0',
+                t.date.toIso8601String(),
+              ],
+            )
+            .toList(),
+      );
+
+      // Export notes
+      final notes = await _db.getNotes();
+      await _writeCsvFile(
+        '${exportDir.path}/notes.csv',
+        ['id', 'title', 'content', 'folder', 'tags', 'created_at'],
+        notes
+            .map(
+              (n) => [
+                n.id?.toString() ?? '',
+                _escapeCsv(n.title),
+                _escapeCsv(n.content),
+                _escapeCsv(n.folder),
+                _escapeCsv(n.tags),
+                n.createdAt.toIso8601String(),
+              ],
+            )
+            .toList(),
+      );
+
+      // Export shopping items
+      final shoppingItems = await _db.getShoppingItems();
+      await _writeCsvFile(
+        '${exportDir.path}/shopping_items.csv',
+        ['id', 'name', 'quantity', 'category', 'checked'],
+        shoppingItems
+            .map(
+              (s) => [
+                s.id?.toString() ?? '',
+                _escapeCsv(s.name),
+                s.quantity.toString(),
+                _escapeCsv(s.category),
+                s.checked ? '1' : '0',
+              ],
+            )
+            .toList(),
+      );
+
+      // Export journal entries
+      final now = DateTime.now();
+      final journalEntries = <JournalEntry>[];
+      for (int i = 0; i < 12; i++) {
+        final date = DateTime(now.year, now.month - i, 1);
+        final entries = await _db.getJournalEntriesForMonth(
+          date.year,
+          date.month,
+        );
+        journalEntries.addAll(entries);
+      }
+      await _writeCsvFile(
+        '${exportDir.path}/journal_entries.csv',
+        ['id', 'timestamp', 'title', 'content', 'mood'],
+        journalEntries
+            .map(
+              (j) => [
+                j.id?.toString() ?? '',
+                j.timestamp.toIso8601String(),
+                _escapeCsv(j.title),
+                _escapeCsv(j.content),
+                _escapeCsv(j.mood ?? ''),
+              ],
+            )
+            .toList(),
+      );
+
+      return exportDir.path;
+    } catch (e) {
+      debugPrint('CSV export error: $e');
+      return null;
+    }
+  }
+
+  /// Import data from a JSON file.
+  /// Returns true on success, false on error.
+  Future<bool> importFromJson(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return false;
+      }
+
+      final content = await file.readAsString();
+      final data = jsonDecode(content) as Map<String, dynamic>;
+
+      // Validate version
+      if (data['version'] != '1.0') {
+        debugPrint('Unsupported export version: ${data['version']}');
+        return false;
+      }
+
+      final importData = data['data'] as Map<String, dynamic>;
+
+      // Clear existing data
+      await _db.deleteAllData();
+
+      // Import projects first (they're referenced by tasks)
+      final projectsData = importData['projects'] as List<dynamic>? ?? [];
+      final projectIdMap = <int, int>{}; // old ID -> new ID
+      for (final p in projectsData) {
+        final oldId = p['id'] as int;
+        final name = p['name'] as String;
+        final newId = await _db.insertProject(name);
+        projectIdMap[oldId] = newId;
+      }
+
+      // Import habits
+      final habitsData = importData['habits'] as List<dynamic>? ?? [];
+      for (final h in habitsData) {
+        final habit = Habit.fromMap(h as Map<String, dynamic>);
+        await _db.insertHabit(habit.copyWith(id: null)); // Clear ID for insert
+      }
+
+      // Import tasks
+      final tasksData = importData['tasks'] as List<dynamic>? ?? [];
+      for (final t in tasksData) {
+        final task = Task.fromMap(t as Map<String, dynamic>);
+        // Remap project ID
+        final newProjectId = task.projectId != null
+            ? projectIdMap[task.projectId]
+            : null;
+        await _db.insertTask(
+          task.copyWith(
+            id: null, // Clear ID for insert
+            projectId: newProjectId,
+          ),
+        );
+      }
+
+      // Import transactions
+      final transactionsData =
+          importData['transactions'] as List<dynamic>? ?? [];
+      for (final t in transactionsData) {
+        final transaction = Transaction.fromMap(t as Map<String, dynamic>);
+        await _db.insertTransaction(
+          Transaction(
+            description: transaction.description,
+            amount: transaction.amount,
+            category: transaction.category,
+            isIncome: transaction.isIncome,
+            date: transaction.date,
+          ),
+        );
+      }
+
+      // Import notes
+      final notesData = importData['notes'] as List<dynamic>? ?? [];
+      for (final n in notesData) {
+        final note = Note.fromMap(n as Map<String, dynamic>);
+        await _db.insertNote(note.copyWith(id: null));
+      }
+
+      // Import shopping items
+      final shoppingData = importData['shoppingItems'] as List<dynamic>? ?? [];
+      for (final s in shoppingData) {
+        final item = ShoppingItem.fromMap(s as Map<String, dynamic>);
+        await _db.insertShoppingItem(item.copyWith(id: null));
+      }
+
+      // Import journal entries
+      final journalData = importData['journalEntries'] as List<dynamic>? ?? [];
+      for (final j in journalData) {
+        final entry = JournalEntry.fromMap(j as Map<String, dynamic>);
+        await _db.insertJournalEntry(entry.copyWith(id: null));
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Import error: $e');
+      return false;
+    }
+  }
+
+  // Helper methods
+
+  String _escapeCsv(String value) {
+    if (value.isEmpty) return '';
+    if (value.contains(',') || value.contains('"') || value.contains('\n')) {
+      return '"${value.replaceAll('"', '""')}"';
+    }
+    return value;
+  }
+
+  Future<void> _writeCsvFile(
+    String path,
+    List<String> headers,
+    List<List<String>> rows,
+  ) async {
+    final file = File(path);
+    final buffer = StringBuffer();
+
+    // Write headers
+    buffer.writeln(headers.join(','));
+
+    // Write rows
+    for (final row in rows) {
+      buffer.writeln(row.join(','));
+    }
+
+    await file.writeAsString(buffer.toString());
+  }
+}

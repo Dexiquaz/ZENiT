@@ -14,17 +14,18 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._();
 
-  static const String _taskChannelId = 'zenit_task_reminders';
+  // Bump channel IDs to force Android to create fresh channels on existing installs.
+  static const String _taskChannelId = 'zenit_task_reminders_v2';
   static const String _taskChannelName = 'Task reminders';
   static const String _taskChannelDescription =
       'Deadline reminders for tasks in ZENiT';
-    static const String _habitChannelId = 'zenit_habit_reminders';
-    static const String _habitChannelName = 'Habit reminders';
-    static const String _habitChannelDescription =
+  static const String _habitChannelId = 'zenit_habit_reminders_v2';
+  static const String _habitChannelName = 'Habit reminders';
+  static const String _habitChannelDescription =
       'Recurring reminders for habits in ZENiT';
-    static const String _journalChannelId = 'zenit_journal_prompts';
-    static const String _journalChannelName = 'Journal prompts';
-    static const String _journalChannelDescription =
+  static const String _journalChannelId = 'zenit_journal_prompts_v2';
+  static const String _journalChannelName = 'Journal prompts';
+  static const String _journalChannelDescription =
       'Daily reflection prompts for ZENiT journal';
 
   final FlutterLocalNotificationsPlugin _plugin =
@@ -43,6 +44,7 @@ class NotificationService {
 
     await _plugin.initialize(settings);
     await _configureLocalTimezone();
+    await _createNotificationChannels();
     await _requestPermissions();
 
     _initialized = true;
@@ -63,24 +65,51 @@ class NotificationService {
       return;
     }
 
-    await _plugin.zonedSchedule(
-      _taskNotificationId(taskId),
-      'Task reminder',
-      taskTitle,
-      scheduledDate,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _taskChannelId,
-          _taskChannelName,
-          channelDescription: _taskChannelDescription,
-          importance: Importance.high,
-          priority: Priority.high,
+    try {
+      await _plugin.zonedSchedule(
+        _taskNotificationId(taskId),
+        'Task reminder',
+        taskTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _taskChannelId,
+            _taskChannelName,
+            channelDescription: _taskChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: 'task:$taskId',
-      matchDateTimeComponents: null,
-    );
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'task:$taskId',
+        matchDateTimeComponents: null,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling task reminder: $e');
+      // Fallback to inexact if exact fails
+      await _plugin.zonedSchedule(
+        _taskNotificationId(taskId),
+        'Task reminder',
+        taskTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _taskChannelId,
+            _taskChannelName,
+            channelDescription: _taskChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'task:$taskId',
+        matchDateTimeComponents: null,
+      );
+    }
   }
 
   Future<void> cancelTaskReminder(int taskId) async {
@@ -141,9 +170,11 @@ class NotificationService {
           channelDescription: _habitChannelDescription,
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'habit:$habitId',
       matchDateTimeComponents: components,
     );
@@ -182,9 +213,11 @@ class NotificationService {
           channelDescription: _journalChannelDescription,
           importance: Importance.high,
           priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'journal:daily',
       matchDateTimeComponents: DateTimeComponents.time,
     );
@@ -239,6 +272,51 @@ class NotificationService {
     return getPermissionStatus();
   }
 
+  /// Check if the app can schedule exact alarms (Android 12+)
+  Future<bool> canScheduleExactAlarms() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return true; // Other platforms don't have this restriction
+    }
+
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    if (androidPlugin == null) return false;
+
+    try {
+      final bool? canSchedule = await androidPlugin
+          .canScheduleExactNotifications();
+      return canSchedule ?? false;
+    } catch (e) {
+      debugPrint('Error checking exact alarm permission: $e');
+      return false;
+    }
+  }
+
+  /// Request permission to schedule exact alarms (Android 12+)
+  Future<bool> requestExactAlarmPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return true;
+    }
+
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    if (androidPlugin == null) return false;
+
+    try {
+      final bool? result = await androidPlugin.requestExactAlarmsPermission();
+      return result ?? false;
+    } catch (e) {
+      debugPrint('Error requesting exact alarm permission: $e');
+      return false;
+    }
+  }
+
   int _taskNotificationId(int taskId) => 100000 + taskId;
   int _habitNotificationId(int habitId) => 200000 + habitId;
   static const int _journalNotificationId = 300000;
@@ -258,6 +336,49 @@ class NotificationService {
       // Fall back to UTC if timezone lookup fails on a given device.
       tz.setLocalLocation(tz.UTC);
     }
+  }
+
+  Future<void> _createNotificationChannels() async {
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    if (androidPlugin == null) return;
+
+    // Create task reminders channel
+    const taskChannel = AndroidNotificationChannel(
+      _taskChannelId,
+      _taskChannelName,
+      description: _taskChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    // Create habit reminders channel
+    const habitChannel = AndroidNotificationChannel(
+      _habitChannelId,
+      _habitChannelName,
+      description: _habitChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    // Create journal prompts channel
+    const journalChannel = AndroidNotificationChannel(
+      _journalChannelId,
+      _journalChannelName,
+      description: _journalChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await androidPlugin.createNotificationChannel(taskChannel);
+    await androidPlugin.createNotificationChannel(habitChannel);
+    await androidPlugin.createNotificationChannel(journalChannel);
   }
 
   Future<void> _requestPermissions() async {
@@ -343,14 +464,7 @@ class NotificationService {
       day = safeDay <= _daysInMonth(year, month)
           ? safeDay
           : _daysInMonth(year, month);
-      next = tz.TZDateTime(
-        tz.local,
-        year,
-        month,
-        day,
-        time.hour,
-        time.minute,
-      );
+      next = tz.TZDateTime(tz.local, year, month, day, time.hour, time.minute);
     }
 
     return next;
