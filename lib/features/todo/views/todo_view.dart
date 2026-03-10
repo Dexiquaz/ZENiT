@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../shared/utils/ui_helpers.dart';
 import '../models/task_model.dart';
 import '../providers/todo_provider.dart';
 import '../widgets/task_detail_dialog.dart';
@@ -470,14 +471,9 @@ class _TaskTile extends ConsumerWidget {
                                           .read(taskListProvider.notifier)
                                           .setTaskPinned(task, !task.pinned);
                                       if (!ok && context.mounted) {
-                                        ScaffoldMessenger.of(
+                                        showSnackBar(
                                           context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'You can pin up to 3 active tasks only.',
-                                            ),
-                                          ),
+                                          'You can pin up to 3 active tasks only.',
                                         );
                                       }
                                     },
