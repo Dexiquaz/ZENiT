@@ -670,7 +670,10 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     final filePath = await _pickJsonBackupFile();
     if (!context.mounted) return;
     if (filePath == null || filePath.isEmpty) {
-      showWarningSnackBar(context, 'Import cancelled. No backup file selected.');
+      showWarningSnackBar(
+        context,
+        'Import cancelled. No backup file selected.',
+      );
       return;
     }
 

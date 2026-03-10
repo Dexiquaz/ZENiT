@@ -72,10 +72,10 @@ void showLoadingDialog(BuildContext context) {
 /// Dismisses the current dialog safely
 Future<void> dismissDialog(BuildContext context) async {
   if (!context.mounted) return;
-  
+
   // Allow Navigator to process dialog state before popping
   await Future.delayed(const Duration(milliseconds: 100));
-  
+
   if (!context.mounted) return;
   try {
     Navigator.of(context, rootNavigator: true).pop();
@@ -90,7 +90,7 @@ Future<T?> withLoadingDialog<T>(
   Future<T> Function() operation,
 ) async {
   showLoadingDialog(context);
-  
+
   try {
     final result = await operation();
     if (!context.mounted) return null;
