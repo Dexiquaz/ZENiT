@@ -27,4 +27,4 @@ Your private daily OS. A comprehensive personal productivity app with no account
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License
