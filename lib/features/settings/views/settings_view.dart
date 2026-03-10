@@ -6,12 +6,9 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/data_export_service.dart';
 import '../../../core/utils/database_helper.dart';
+import '../../../core/utils/provider_helpers.dart';
 import '../../../shared/utils/time_picker_helper.dart';
-import '../../habit_tracker/providers/habit_provider.dart';
-import '../../todo/providers/todo_provider.dart';
-import '../../finance/providers/finance_provider.dart';
-import '../../notes_shopping/providers/notes_provider.dart';
-import '../../zen_mode/providers/zen_mode_provider.dart';
+import '../../../shared/utils/ui_helpers.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -133,7 +130,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                           .setJournalPromptEnabled(value);
                     },
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Notification Permission',
@@ -153,7 +150,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     },
                   ),
                   if (Platform.isAndroid) ...[
-                    const Divider(indent: 56),
+                    dividerListTile,
                     _buildListTile(
                       context,
                       title: 'Exact Alarm Permission',
@@ -172,7 +169,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       },
                     ),
                   ],
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Default Reminder Time',
@@ -182,7 +179,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                         ? () => _pickJournalReminderTime(context, ref, settings)
                         : null,
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Time Format',
@@ -209,7 +206,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     subtitle: 'Data stays on this device unless you export it.',
                     icon: Icons.shield_outlined,
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Export Data (JSON)',
@@ -217,7 +214,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     icon: Icons.download_outlined,
                     onTap: () => _exportDataJson(context, ref),
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Import Data',
@@ -225,7 +222,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     icon: Icons.upload_outlined,
                     onTap: () => _importData(context, ref),
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Delete All Data',
@@ -249,7 +246,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     subtitle: 'Dark (Fixed)',
                     icon: Icons.dark_mode_outlined,
                   ),
-                  const Divider(indent: 56),
+                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Version',
@@ -316,19 +313,10 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     await ref.read(settingsProvider.notifier).resetToDefaults();
 
     // Force module providers to reload after wipe.
-    ref.invalidate(habitListProvider);
-    ref.invalidate(projectListProvider);
-    ref.invalidate(taskListProvider);
-    ref.invalidate(transactionListProvider);
-    ref.invalidate(noteListProvider);
-    ref.invalidate(shoppingListProvider);
-    ref.invalidate(journalProvider);
-    ref.invalidate(zenTimerProvider);
+    invalidateAllProviders(ref);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('All local data deleted.')));
+      showSuccessSnackBar(context, 'All local data deleted.');
     }
   }
 
@@ -368,9 +356,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      shape: bottomSheetShape,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -433,9 +419,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      shape: bottomSheetShape,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -544,11 +528,9 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
 
     if (selectedDirectory == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Export cancelled. No directory selected.'),
-            backgroundColor: Colors.blueGrey,
-          ),
+        showWarningSnackBar(
+          context,
+          'Export cancelled. No directory selected.',
         );
       }
       return;
@@ -562,58 +544,26 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     if (!context.mounted) return;
 
     try {
-      // Show loading dialog
-      if (!context.mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      final filePath = await withLoadingDialog(
+        context,
+        () => exportService.exportToJson(
+          settings: settingsMap,
+          customDirectoryPath: selectedDirectory,
+        ),
       );
-
-      final filePath = await exportService.exportToJson(
-        settings: settingsMap,
-        customDirectoryPath: selectedDirectory,
-      );
-      if (!context.mounted) return;
-
-      // Allow Navigator to process dialog state before popping
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!context.mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
 
       if (filePath != null) {
-        _showExportResultDialog(context, filePath, 'JSON');
+        if (context.mounted) {
+          _showExportResultDialog(context, filePath, 'JSON');
+        }
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Export failed. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          showErrorSnackBar(context, 'Export failed. Please try again.');
         }
       }
     } catch (e) {
-      if (!context.mounted) return;
-
-      // Allow Navigator to process dialog state before popping
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!context.mounted) return;
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {
-        // Dialog might have already been dismissed
-      }
-
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Export error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, 'Export error: $e');
       }
     }
   }
@@ -720,36 +670,20 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     final filePath = await _pickJsonBackupFile();
     if (!context.mounted) return;
     if (filePath == null || filePath.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Import cancelled. No backup file selected.'),
-          backgroundColor: Colors.blueGrey,
-        ),
-      );
+      showWarningSnackBar(context, 'Import cancelled. No backup file selected.');
       return;
     }
 
-    // Show loading
     if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
 
     try {
       final exportService = DataExportService();
-      final result = await exportService.importFromJsonDetailed(filePath);
+      final result = await withLoadingDialog(
+        context,
+        () => exportService.importFromJsonDetailed(filePath),
+      );
 
-      if (!context.mounted) return;
-
-      // Allow Navigator to process dialog state before popping
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!context.mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-
-      if (result.success) {
+      if (result != null && result.success) {
         if (result.settings != null) {
           await ref
               .read(settingsProvider.notifier)
@@ -758,53 +692,19 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
         }
 
         // Force all providers to reload
-        ref.invalidate(habitListProvider);
-        ref.invalidate(projectListProvider);
-        ref.invalidate(taskListProvider);
-        ref.invalidate(transactionListProvider);
-        ref.invalidate(noteListProvider);
-        ref.invalidate(shoppingListProvider);
-        ref.invalidate(journalProvider);
-        ref.invalidate(zenTimerProvider);
+        invalidateAllProviders(ref);
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.green,
-            ),
-          );
+          showSuccessSnackBar(context, result.message);
         }
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-            ),
-          );
+          showErrorSnackBar(context, result?.message ?? 'Import failed.');
         }
       }
     } catch (e) {
-      if (!context.mounted) return;
-
-      // Allow Navigator to process dialog state before popping
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!context.mounted) return;
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {
-        // Dialog might have already been dismissed
-      }
-
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Import error: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, 'Import error: $e');
       }
     }
   }
