@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/settings_provider.dart';
@@ -214,15 +215,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     title: 'Export Data (JSON)',
                     subtitle: 'Save all your data to a JSON file.',
                     icon: Icons.download_outlined,
-                    onTap: () => _exportDataJson(context),
-                  ),
-                  const Divider(indent: 56),
-                  _buildListTile(
-                    context,
-                    title: 'Export Data (CSV)',
-                    subtitle: 'Save all your data to CSV files.',
-                    icon: Icons.table_chart_outlined,
-                    onTap: () => _exportDataCsv(context),
+                    onTap: () => _exportDataJson(context, ref),
                   ),
                   const Divider(indent: 56),
                   _buildListTile(
@@ -545,8 +538,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     }
   }
 
-  Future<void> _exportDataJson(BuildContext context) async {
+  Future<void> _exportDataJson(BuildContext context, WidgetRef ref) async {
     final exportService = DataExportService();
+    final settingsMap = await ref
+        .read(settingsProvider.notifier)
+        .exportBackupMap();
 
     // Show loading
     if (!context.mounted) return;
@@ -556,41 +552,13 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
-    final filePath = await exportService.exportToJson();
+    final filePath = await exportService.exportToJson(settings: settingsMap);
 
     if (!context.mounted) return;
     Navigator.pop(context); // Dismiss loading
 
     if (filePath != null) {
       _showExportResultDialog(context, filePath, 'JSON');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Export failed. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _exportDataCsv(BuildContext context) async {
-    final exportService = DataExportService();
-
-    // Show loading
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
-    );
-
-    final dirPath = await exportService.exportToCsv();
-
-    if (!context.mounted) return;
-    Navigator.pop(context); // Dismiss loading
-
-    if (dirPath != null) {
-      _showExportResultDialog(context, dirPath, 'CSV');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -656,9 +624,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   }
 
   Future<void> _importData(BuildContext context, WidgetRef ref) async {
-    // First, show a confirmation dialog with file path input
-    final controller = TextEditingController();
-
+    // Confirm user intent before starting restore flow.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -675,19 +641,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Enter the full path to your JSON export file:'),
-            const SizedBox(height: 8),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: '/storage/emulated/0/Documents/zenit_export_...json',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 16),
             Text(
-              'Tip: You can find exported files in your Documents folder.',
+              'Tap IMPORT to choose a JSON backup file from your device.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(
                   context,
@@ -710,18 +665,16 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     );
 
     if (confirmed != true || !context.mounted) {
-      controller.dispose();
       return;
     }
 
-    final filePath = controller.text.trim();
-    controller.dispose();
-
-    if (filePath.isEmpty) {
+    final filePath = await _pickJsonBackupFile();
+    if (!context.mounted) return;
+    if (filePath == null || filePath.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a file path.'),
-          backgroundColor: Colors.orange,
+          content: Text('Import cancelled. No backup file selected.'),
+          backgroundColor: Colors.blueGrey,
         ),
       );
       return;
@@ -736,12 +689,19 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     );
 
     final exportService = DataExportService();
-    final success = await exportService.importFromJson(filePath);
+    final result = await exportService.importFromJsonDetailed(filePath);
 
     if (!context.mounted) return;
     Navigator.pop(context); // Dismiss loading
 
-    if (success) {
+    if (result.success) {
+      if (result.settings != null) {
+        await ref
+            .read(settingsProvider.notifier)
+            .applyBackupMap(result.settings!);
+        if (!context.mounted) return;
+      }
+
       // Force all providers to reload
       ref.invalidate(habitListProvider);
       ref.invalidate(projectListProvider);
@@ -753,20 +713,26 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       ref.invalidate(zenTimerProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data imported successfully!'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text(result.message), backgroundColor: Colors.green),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Import failed. Please check the file path and try again.',
-          ),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(result.message), backgroundColor: Colors.red),
       );
     }
+  }
+
+  Future<String?> _pickJsonBackupFile() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      allowMultiple: false,
+    );
+
+    if (picked == null || picked.files.isEmpty) {
+      return null;
+    }
+
+    return picked.files.single.path;
   }
 }

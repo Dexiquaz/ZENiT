@@ -412,4 +412,10 @@ class DatabaseHelper {
     );
     return maps.map((m) => JournalEntry.fromMap(m)).toList();
   }
+
+  Future<List<JournalEntry>> getAllJournalEntries() async {
+    final db = await database;
+    final maps = await db.query('journal_entries', orderBy: 'timestamp DESC');
+    return maps.map((m) => JournalEntry.fromMap(m)).toList();
+  }
 }

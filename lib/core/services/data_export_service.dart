@@ -8,6 +8,18 @@ import '../../features/todo/models/task_model.dart';
 import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
 
+class DataImportResult {
+  final bool success;
+  final String message;
+  final Map<String, dynamic>? settings;
+
+  const DataImportResult({
+    required this.success,
+    required this.message,
+    this.settings,
+  });
+}
+
 /// Service for exporting and importing all user data.
 class DataExportService {
   static final DataExportService _instance = DataExportService._internal();
@@ -18,7 +30,7 @@ class DataExportService {
 
   /// Export all data to a JSON file.
   /// Returns the file path on success, null on error.
-  Future<String?> exportToJson() async {
+  Future<String?> exportToJson({Map<String, dynamic>? settings}) async {
     try {
       // Gather all data
       final habits = await _db.getHabits();
@@ -27,24 +39,13 @@ class DataExportService {
       final transactions = await _db.getTransactions();
       final notes = await _db.getNotes();
       final shoppingItems = await _db.getShoppingItems();
-
-      // Get all journal entries - need to query by month ranges
-      final now = DateTime.now();
-      final journalEntries = <JournalEntry>[];
-      // Export last 12 months of journal entries
-      for (int i = 0; i < 12; i++) {
-        final date = DateTime(now.year, now.month - i, 1);
-        final entries = await _db.getJournalEntriesForMonth(
-          date.year,
-          date.month,
-        );
-        journalEntries.addAll(entries);
-      }
+      final journalEntries = await _db.getAllJournalEntries();
 
       // Create export object
       final exportData = {
-        'version': '1.0',
+        'version': '1.1',
         'exportedAt': DateTime.now().toIso8601String(),
+        'settings': settings ?? <String, dynamic>{},
         'data': {
           'habits': habits.map((h) => h.toMap()).toList(),
           'tasks': tasks.map((t) => t.toMap()).toList(),
@@ -261,22 +262,52 @@ class DataExportService {
   /// Import data from a JSON file.
   /// Returns true on success, false on error.
   Future<bool> importFromJson(String filePath) async {
+    final result = await importFromJsonDetailed(filePath);
+    return result.success;
+  }
+
+  Future<DataImportResult> importFromJsonDetailed(String filePath) async {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
-        return false;
+        return const DataImportResult(
+          success: false,
+          message: 'Selected backup file was not found.',
+        );
       }
 
       final content = await file.readAsString();
-      final data = jsonDecode(content) as Map<String, dynamic>;
+      final decoded = jsonDecode(content);
+      if (decoded is! Map<String, dynamic>) {
+        return const DataImportResult(
+          success: false,
+          message: 'Backup file format is invalid.',
+        );
+      }
+
+      final data = decoded;
 
       // Validate version
-      if (data['version'] != '1.0') {
+      final version = data['version']?.toString();
+      if (version != '1.0' && version != '1.1') {
         debugPrint('Unsupported export version: ${data['version']}');
-        return false;
+        return DataImportResult(
+          success: false,
+          message: 'Unsupported backup version: ${data['version']}.',
+        );
+      }
+
+      if (data['data'] is! Map<String, dynamic>) {
+        return const DataImportResult(
+          success: false,
+          message: 'Backup file is missing required data payload.',
+        );
       }
 
       final importData = data['data'] as Map<String, dynamic>;
+      final backupSettings = data['settings'] is Map<String, dynamic>
+          ? data['settings'] as Map<String, dynamic>
+          : null;
 
       // Clear existing data
       await _db.deleteAllData();
@@ -284,24 +315,38 @@ class DataExportService {
       // Import projects first (they're referenced by tasks)
       final projectsData = importData['projects'] as List<dynamic>? ?? [];
       final projectIdMap = <int, int>{}; // old ID -> new ID
+
+      final currentProjects = await _db.getProjects();
+      final existingByName = <String, int>{
+        for (final p in currentProjects)
+          if (p.id != null) p.name.toLowerCase(): p.id!,
+      };
+
       for (final p in projectsData) {
-        final oldId = p['id'] as int;
-        final name = p['name'] as String;
-        final newId = await _db.insertProject(name);
+        if (p is! Map<String, dynamic>) continue;
+        final oldId = (p['id'] as num?)?.toInt();
+        final name = p['name']?.toString();
+        if (oldId == null || name == null || name.isEmpty) continue;
+
+        final existingId = existingByName[name.toLowerCase()];
+        final newId = existingId ?? await _db.insertProject(name);
+        existingByName[name.toLowerCase()] = newId;
         projectIdMap[oldId] = newId;
       }
 
       // Import habits
       final habitsData = importData['habits'] as List<dynamic>? ?? [];
       for (final h in habitsData) {
-        final habit = Habit.fromMap(h as Map<String, dynamic>);
+        if (h is! Map<String, dynamic>) continue;
+        final habit = Habit.fromMap(h);
         await _db.insertHabit(habit.copyWith(id: null)); // Clear ID for insert
       }
 
       // Import tasks
       final tasksData = importData['tasks'] as List<dynamic>? ?? [];
       for (final t in tasksData) {
-        final task = Task.fromMap(t as Map<String, dynamic>);
+        if (t is! Map<String, dynamic>) continue;
+        final task = Task.fromMap(t);
         // Remap project ID
         final newProjectId = task.projectId != null
             ? projectIdMap[task.projectId]
@@ -318,7 +363,8 @@ class DataExportService {
       final transactionsData =
           importData['transactions'] as List<dynamic>? ?? [];
       for (final t in transactionsData) {
-        final transaction = Transaction.fromMap(t as Map<String, dynamic>);
+        if (t is! Map<String, dynamic>) continue;
+        final transaction = Transaction.fromMap(t);
         await _db.insertTransaction(
           Transaction(
             description: transaction.description,
@@ -333,28 +379,43 @@ class DataExportService {
       // Import notes
       final notesData = importData['notes'] as List<dynamic>? ?? [];
       for (final n in notesData) {
-        final note = Note.fromMap(n as Map<String, dynamic>);
+        if (n is! Map<String, dynamic>) continue;
+        final note = Note.fromMap(n);
         await _db.insertNote(note.copyWith(id: null));
       }
 
       // Import shopping items
       final shoppingData = importData['shoppingItems'] as List<dynamic>? ?? [];
       for (final s in shoppingData) {
-        final item = ShoppingItem.fromMap(s as Map<String, dynamic>);
+        if (s is! Map<String, dynamic>) continue;
+        final item = ShoppingItem.fromMap(s);
         await _db.insertShoppingItem(item.copyWith(id: null));
       }
 
       // Import journal entries
       final journalData = importData['journalEntries'] as List<dynamic>? ?? [];
       for (final j in journalData) {
-        final entry = JournalEntry.fromMap(j as Map<String, dynamic>);
+        if (j is! Map<String, dynamic>) continue;
+        final entry = JournalEntry.fromMap(j);
         await _db.insertJournalEntry(entry.copyWith(id: null));
       }
 
-      return true;
+      return DataImportResult(
+        success: true,
+        message: 'Backup restored successfully.',
+        settings: backupSettings,
+      );
+    } on FormatException {
+      return const DataImportResult(
+        success: false,
+        message: 'Backup file is not valid JSON.',
+      );
     } catch (e) {
       debugPrint('Import error: $e');
-      return false;
+      return const DataImportResult(
+        success: false,
+        message: 'Import failed due to unexpected data or format issues.',
+      );
     }
   }
 
