@@ -68,9 +68,13 @@ class DashboardView extends ConsumerWidget {
               icon: zenState.isRunning ? Icons.timer : Icons.timer_outlined,
               onTap: () => showZenQuickSheet(context),
               summaryValue: zenState.timeLabel,
-              summarySubtitle: zenState.phaseLabel,
+              summarySubtitle: zenState.hasLinkedTask
+                  ? '${zenState.phaseLabel} • linked'
+                  : zenState.phaseLabel,
               details: Text(
-                zenState.isRunning
+                zenState.hasLinkedTask
+                    ? '${zenState.linkedTaskTitle} • ${zenState.completedFocusSessions} cycles completed'
+                    : zenState.isRunning
                     ? 'Focus engine active. Tap to control session flow.'
                     : zenState.isIdle
                     ? 'Start a 25-minute focus sprint.'

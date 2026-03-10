@@ -479,6 +479,7 @@ class _TaskTile extends ConsumerWidget {
                                     },
                             ),
                           ),
+                          const SizedBox(height: 6),
                           SizedBox(
                             height: 24,
                             child: IconButton(

@@ -5,6 +5,7 @@ import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
 import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
+import '../../features/zen_mode/models/focus_session.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -23,7 +24,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'personal_organizer.db');
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -47,6 +48,22 @@ class DatabaseHelper {
         parent_id INTEGER, priority INTEGER, due_date TEXT, reminder_at TEXT,
         is_pinned INTEGER DEFAULT 0, completed INTEGER,
         created_at TEXT, FOREIGN KEY(project_id) REFERENCES projects(id)
+      )''');
+    await db.execute('''
+      CREATE TABLE focus_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER,
+        task_title_snapshot TEXT,
+        status INTEGER NOT NULL,
+        phase INTEGER NOT NULL,
+        focus_duration_seconds INTEGER NOT NULL,
+        break_duration_seconds INTEGER NOT NULL,
+        remaining_seconds INTEGER NOT NULL,
+        completed_focus_sessions INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        FOREIGN KEY(task_id) REFERENCES tasks(id)
       )''');
     await db.execute('''
       CREATE TABLE transactions_log(
@@ -180,6 +197,24 @@ class DatabaseHelper {
         mood TEXT
       )''');
     }
+
+    if (oldVersion < 7) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS focus_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER,
+        task_title_snapshot TEXT,
+        status INTEGER NOT NULL,
+        phase INTEGER NOT NULL,
+        focus_duration_seconds INTEGER NOT NULL,
+        break_duration_seconds INTEGER NOT NULL,
+        remaining_seconds INTEGER NOT NULL,
+        completed_focus_sessions INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        FOREIGN KEY(task_id) REFERENCES tasks(id)
+      )''');
+    }
   }
 
   // ── Habits ──
@@ -244,6 +279,18 @@ class DatabaseHelper {
         .toList(growable: false);
   }
 
+  Future<Task?> getTaskById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Task.fromMap(maps.first);
+  }
+
   // ── Tasks ──
   Future<int> insertTask(Task task) async =>
       (await database).insert('tasks', task.toMap());
@@ -268,11 +315,33 @@ class DatabaseHelper {
   Future<int> deleteTask(int id) async =>
       (await database).delete('tasks', where: 'id = ?', whereArgs: [id]);
 
+  Future<void> unlinkFocusSessionsForTask(int taskId) async {
+    await (await database).update(
+      'focus_sessions',
+      {'task_id': null},
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
+  Future<void> unlinkFocusSessionsForTasks(List<int> taskIds) async {
+    if (taskIds.isEmpty) return;
+
+    final placeholders = List.filled(taskIds.length, '?').join(', ');
+    await (await database).update(
+      'focus_sessions',
+      {'task_id': null},
+      where: 'task_id IN ($placeholders)',
+      whereArgs: taskIds,
+    );
+  }
+
   Future<void> deleteAllData() async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('habits');
       await txn.delete('tasks');
+      await txn.delete('focus_sessions');
       await txn.delete('projects');
       await txn.delete('transactions_log');
       await txn.delete('notes');
@@ -417,5 +486,63 @@ class DatabaseHelper {
     final db = await database;
     final maps = await db.query('journal_entries', orderBy: 'timestamp DESC');
     return maps.map((m) => JournalEntry.fromMap(m)).toList();
+  }
+
+  // ── Focus Sessions ──
+  Future<int> insertFocusSession(FocusSession session) async =>
+      (await database).insert('focus_sessions', session.toMap());
+
+  Future<int> updateFocusSession(FocusSession session) async =>
+      (await database).update(
+        'focus_sessions',
+        session.toMap(),
+        where: 'id = ?',
+        whereArgs: [session.id],
+      );
+
+  Future<FocusSession?> getActiveFocusSession() async {
+    final db = await database;
+    final maps = await db.query(
+      'focus_sessions',
+      where: 'status IN (?, ?)',
+      whereArgs: [
+        FocusSessionStatus.running.index,
+        FocusSessionStatus.paused.index,
+      ],
+      orderBy: 'updated_at DESC',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return FocusSession.fromMap(maps.first);
+  }
+
+  Future<List<FocusSession>> getFocusSessions({int? taskId}) async {
+    final db = await database;
+    final maps = taskId == null
+        ? await db.query('focus_sessions', orderBy: 'started_at DESC')
+        : await db.query(
+            'focus_sessions',
+            where: 'task_id = ?',
+            whereArgs: [taskId],
+            orderBy: 'started_at DESC',
+          );
+    return maps.map(FocusSession.fromMap).toList();
+  }
+
+  Future<int> getCompletedFocusSecondsForTask(int taskId) async {
+    final db = await database;
+    final totalSeconds =
+        Sqflite.firstIntValue(
+          await db.rawQuery(
+            '''
+            SELECT COALESCE(SUM(focus_duration_seconds * completed_focus_sessions), 0)
+            FROM focus_sessions
+            WHERE task_id = ? AND status != ?
+            ''',
+            [taskId, FocusSessionStatus.cancelled.index],
+          ),
+        ) ??
+        0;
+    return totalSeconds;
   }
 }

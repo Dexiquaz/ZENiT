@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../todo/models/task_model.dart';
+import '../../todo/providers/todo_provider.dart';
 import '../providers/zen_mode_provider.dart';
 
 class ZenModeView extends ConsumerWidget {
@@ -10,6 +12,7 @@ class ZenModeView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(zenTimerProvider);
     final notifier = ref.read(zenTimerProvider.notifier);
+    final taskState = ref.watch(allTaskListProvider);
     final focusMinutes = state.focusDuration.inMinutes.clamp(1, 60).toInt();
     final breakMinutes = state.breakDuration.inMinutes.clamp(1, 30).toInt();
 
@@ -81,6 +84,28 @@ class ZenModeView extends ConsumerWidget {
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    if (state.hasLinkedTask) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.work_outline,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              state.linkedTaskTitle ?? 'Linked task',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Text(
                       '${state.completedFocusSessions} focus cycles completed',
@@ -93,14 +118,113 @@ class ZenModeView extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
+            Text(
+              'LINKED TASK',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                letterSpacing: 2.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: taskState.when(
+                  data: (tasks) {
+                    final pendingTasks = tasks
+                        .where((task) => !task.completed)
+                        .toList();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          state.hasLinkedTask
+                              ? (state.linkedTaskTitle ?? 'Linked task')
+                              : 'No task selected',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          state.hasStarted
+                              ? 'Task is locked while this session is active or paused.'
+                              : 'Pick what you will work on before starting focus.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed:
+                                  state.hasStarted || pendingTasks.isEmpty
+                                  ? null
+                                  : () => _showTaskPicker(
+                                      context,
+                                      pendingTasks,
+                                      state.linkedTaskId,
+                                      notifier,
+                                    ),
+                              icon: const Icon(Icons.playlist_add_check),
+                              label: const Text('SELECT TASK'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  state.hasStarted || !state.hasLinkedTask
+                                  ? null
+                                  : () => notifier.clearLinkedTask(),
+                              icon: const Icon(Icons.close),
+                              label: const Text('CLEAR'),
+                            ),
+                          ],
+                        ),
+                        if (pendingTasks.isEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            'No pending tasks available. Add a task first.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                  loading: () => const SizedBox(
+                    height: 56,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) =>
+                      const Text('Could not load tasks for linking.'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: [
                 FilledButton.icon(
                   onPressed: state.isRunning
-                      ? notifier.pause
-                      : (state.isIdle ? notifier.startFocus : notifier.resume),
+                      ? () => notifier.pause()
+                      : (state.isIdle
+                            ? () => notifier.startFocus(
+                                taskId: state.linkedTaskId,
+                                taskTitle: state.linkedTaskTitle,
+                              )
+                            : () => notifier.resume()),
                   icon: Icon(
                     state.isRunning
                         ? Icons.pause
@@ -113,13 +237,13 @@ class ZenModeView extends ConsumerWidget {
                   ),
                 ),
                 OutlinedButton.icon(
-                  onPressed: state.hasStarted ? notifier.reset : null,
+                  onPressed: state.hasStarted ? () => notifier.reset() : null,
                   icon: const Icon(Icons.restart_alt),
                   label: const Text('RESET'),
                 ),
                 OutlinedButton.icon(
                   onPressed: state.isRunning || state.hasStarted
-                      ? notifier.skipPhase
+                      ? () => notifier.skipPhase()
                       : null,
                   icon: const Icon(Icons.skip_next),
                   label: const Text('SKIP'),
@@ -217,5 +341,50 @@ class ZenModeView extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showTaskPicker(
+    BuildContext context,
+    List<Task> tasks,
+    int? selectedTaskId,
+    ZenTimerNotifier notifier,
+  ) async {
+    final selectedTask = await showModalBottomSheet<Task>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: tasks.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final task = tasks[index];
+              return ListTile(
+                leading: Icon(
+                  task.id == selectedTaskId
+                      ? Icons.check_circle
+                      : Icons.circle_outlined,
+                ),
+                title: Text(task.title),
+                subtitle: task.dueDate != null
+                    ? Text(
+                        'Due ${task.dueDate!.year}.${task.dueDate!.month.toString().padLeft(2, '0')}.${task.dueDate!.day.toString().padLeft(2, '0')}',
+                      )
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(task),
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (selectedTask != null) {
+      await notifier.setLinkedTask(
+        taskId: selectedTask.id,
+        taskTitle: selectedTask.title,
+      );
+    }
   }
 }

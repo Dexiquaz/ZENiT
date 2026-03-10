@@ -54,6 +54,28 @@ class _ZenQuickSheet extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (state.hasLinkedTask) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.work_outline,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              state.linkedTaskTitle ?? 'Linked task',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       children: [
                         Icon(
@@ -106,8 +128,13 @@ class _ZenQuickSheet extends ConsumerWidget {
               children: [
                 FilledButton.icon(
                   onPressed: state.isRunning
-                      ? notifier.pause
-                      : (state.isIdle ? notifier.startFocus : notifier.resume),
+                      ? () => notifier.pause()
+                      : (state.isIdle
+                            ? () => notifier.startFocus(
+                                taskId: state.linkedTaskId,
+                                taskTitle: state.linkedTaskTitle,
+                              )
+                            : () => notifier.resume()),
                   icon: Icon(
                     state.isRunning
                         ? Icons.pause
@@ -120,13 +147,13 @@ class _ZenQuickSheet extends ConsumerWidget {
                   ),
                 ),
                 OutlinedButton.icon(
-                  onPressed: state.hasStarted ? notifier.reset : null,
+                  onPressed: state.hasStarted ? () => notifier.reset() : null,
                   icon: const Icon(Icons.restart_alt),
                   label: const Text('RESET'),
                 ),
                 OutlinedButton.icon(
                   onPressed: state.isRunning || state.hasStarted
-                      ? notifier.skipPhase
+                      ? () => notifier.skipPhase()
                       : null,
                   icon: const Icon(Icons.skip_next),
                   label: const Text('SKIP'),

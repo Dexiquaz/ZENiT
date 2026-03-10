@@ -34,6 +34,8 @@ class ProjectNotifier extends AsyncNotifier<List<Project>> {
       await _notifications.cancelTaskReminder(taskId);
     }
 
+    await _db.unlinkFocusSessionsForTasks(taskIds);
+
     await _db.deleteProject(id);
     // If the deleted project was selected, reset selection to null (All)
     if (ref.read(selectedProjectProvider) == id) {
@@ -48,6 +50,12 @@ class ProjectNotifier extends AsyncNotifier<List<Project>> {
 final taskListProvider = AsyncNotifierProvider<TaskNotifier, List<Task>>(
   TaskNotifier.new,
 );
+
+final allTaskListProvider = FutureProvider<List<Task>>((ref) async {
+  // Re-evaluate whenever the filtered task provider changes.
+  ref.watch(taskListProvider);
+  return DatabaseHelper().getTasks();
+});
 
 class TaskNotifier extends AsyncNotifier<List<Task>> {
   final _db = DatabaseHelper();
@@ -112,6 +120,7 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
 
   Future<void> deleteTask(int id) async {
     await _notifications.cancelTaskReminder(id);
+    await _db.unlinkFocusSessionsForTask(id);
     await _db.deleteTask(id);
     ref.invalidateSelf();
     ref.invalidate(projectListProvider);
