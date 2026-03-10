@@ -352,6 +352,16 @@ class DatabaseHelper {
     await db.delete('journal_entries', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<void> updateJournalEntry(JournalEntry j) async {
+    final db = await database;
+    await db.update(
+      'journal_entries',
+      j.toMap(),
+      where: 'id = ?',
+      whereArgs: [j.id],
+    );
+  }
+
   Future<void> upsertJournalEntry(JournalEntry j) async {
     final db = await database;
     final dateStr = j.timestamp.toIso8601String().split('T')[0];

@@ -299,76 +299,320 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
         builder: (ctx, setS) => Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 24,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'NEW ENTRY',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 24),
-              // Mood selector
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: ['😊', '🧘', '🌙', '😴', '💪', '🎯']
-                    .map(
-                      (mood) => GestureDetector(
-                        onTap: () => setS(() => selectedMood = mood),
-                        child: Text(
-                          mood,
-                          style: TextStyle(
-                            fontSize: selectedMood == mood ? 32 : 24,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'NEW ENTRY',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 24),
+                  // Mood selector
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children:
+                        [
+                              // Happy/Positive
+                              '😊', '😄', '🥰', '✨', '🌟',
+                              // Calm/Meditative
+                              '🧘', '😌', '🌙', '☮️',
+                              // Tired/Rest
+                              '😴', '🥱', '🛌',
+                              // Active/Productive
+                              '💪', '🎯', '🔥', '⚡', '🚀',
+                              // Social
+                              '👥', '💬', '🎉', '❤️',
+                              // Creative
+                              '🎨', '✍️', '💡', '📝',
+                              // Nature/Mindful
+                              '🌱', '🌻', '🌈', '🍃',
+                              // Daily
+                              '☕', '📚', '🎵', '🎮',
+                            ]
+                            .map(
+                              (mood) => FilterChip(
+                                label: Text(
+                                  mood,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                                selected: selectedMood == mood,
+                                onSelected: (selected) {
+                                  if (selected) setS(() => selectedMood = mood);
+                                },
+                                showCheckmark: false,
+                              ),
+                            )
+                            .toList()
+                          ..add(
+                            FilterChip(
+                              label: const Text('CUSTOM'),
+                              selected: false,
+                              onSelected: (_) {
+                                showDialog(
+                                  context: ctx,
+                                  builder: (dialogCtx) {
+                                    final controller = TextEditingController();
+                                    return AlertDialog(
+                                      title: const Text('CUSTOM EMOJI'),
+                                      content: TextField(
+                                        controller: controller,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Enter any emoji',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        maxLength: 2,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(dialogCtx),
+                                          child: const Text('CANCEL'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            if (controller.text.isNotEmpty) {
+                                              setS(
+                                                () => selectedMood =
+                                                    controller.text,
+                                              );
+                                              Navigator.pop(dialogCtx);
+                                            }
+                                          },
+                                          child: const Text('SET'),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                              showCheckmark: false,
+                            ),
                           ),
-                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Show selected mood
+                  if (selectedMood.isNotEmpty)
+                    Text(
+                      'SELECTED: $selectedMood',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
                       ),
-                    )
-                    .toList(),
+                      textAlign: TextAlign.center,
+                    ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'TITLE',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: contentController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'CONTENT',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton(
+                    onPressed: () {
+                      if (titleController.text.isNotEmpty) {
+                        ref
+                            .read(journalProvider.notifier)
+                            .addEntry(
+                              titleController.text,
+                              contentController.text,
+                              mood: selectedMood,
+                            );
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: const Text('SAVE ENTRY'),
+                  ),
+                  const SizedBox(height: 32),
+                ],
               ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(
-                  labelText: 'TITLE',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: contentController,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'CONTENT',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: () {
-                  if (titleController.text.isNotEmpty) {
-                    ref
-                        .read(journalProvider.notifier)
-                        .addEntry(
-                          titleController.text,
-                          contentController.text,
-                          mood: selectedMood,
-                        );
-                    Navigator.pop(ctx);
-                  }
-                },
-                child: const Text('SAVE ENTRY'),
-              ),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+// Standalone function for editing journal entries (can be called from any widget)
+void _showEditEntryDialog(
+  BuildContext context,
+  WidgetRef ref,
+  JournalEntry entry,
+) {
+  final titleController = TextEditingController(text: entry.title);
+  final contentController = TextEditingController(text: entry.content);
+  String selectedMood = entry.mood ?? '😊';
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'EDIT ENTRY',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 24),
+                // Mood selector
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children:
+                      [
+                            // Happy/Positive
+                            '😊', '😄', '🥰', '✨',
+                            // Calm/Meditative
+                            '🧘', '😌',
+                            // Tired/Rest
+                            '😴', '🥱', '🛌',
+                            // Active/Productive
+                            '💪', '🎯', '🔥', '⚡',
+                            // Social
+                            '👥', '💬', '🎉', '❤️',
+                            // Creative
+                            '🎨', '✍️', '💡', '📝',
+                            // Nature/Mindful
+                            '🌱', '🌻',
+                            // Daily
+                            '☕', '📚', '🎵', '🎮',
+                          ]
+                          .map(
+                            (mood) => FilterChip(
+                              label: Text(
+                                mood,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              selected: selectedMood == mood,
+                              onSelected: (selected) {
+                                if (selected) setS(() => selectedMood = mood);
+                              },
+                              showCheckmark: false,
+                            ),
+                          )
+                          .toList()
+                        ..add(
+                          FilterChip(
+                            label: const Text('CUSTOM'),
+                            selected: false,
+                            onSelected: (_) {
+                              showDialog(
+                                context: context,
+                                builder: (dialogCtx) {
+                                  final controller = TextEditingController();
+                                  return AlertDialog(
+                                    title: const Text('CUSTOM EMOJI'),
+                                    content: TextField(
+                                      controller: controller,
+                                      decoration: const InputDecoration(
+                                        hintText: 'Enter any emoji',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      maxLength: 2,
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dialogCtx),
+                                        child: const Text('CANCEL'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          if (controller.text.isNotEmpty) {
+                                            setS(
+                                              () => selectedMood =
+                                                  controller.text,
+                                            );
+                                            Navigator.pop(dialogCtx);
+                                          }
+                                        },
+                                        child: const Text('SET'),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              );
+                            },
+                            showCheckmark: false,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 16),
+                // Show selected mood
+                if (selectedMood.isNotEmpty)
+                  Text(
+                    'SELECTED: $selectedMood',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'TITLE',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: contentController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'CONTENT',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                FilledButton(
+                  onPressed: () {
+                    if (titleController.text.isNotEmpty) {
+                      final updatedEntry = entry.copyWith(
+                        title: titleController.text,
+                        content: contentController.text,
+                        mood: selectedMood,
+                      );
+                      ref
+                          .read(journalProvider.notifier)
+                          .updateEntry(updatedEntry);
+                      Navigator.pop(ctx);
+                    }
+                  },
+                  child: const Text('UPDATE ENTRY'),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _EntryCard extends StatelessWidget {
@@ -382,7 +626,7 @@ class _EntryCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onLongPress: () => _showEntryOptions(context),
+        onTap: () => _showEntryOptions(context),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -442,6 +686,7 @@ class _EntryCard extends StatelessWidget {
               title: const Text('EDIT ENTRY'),
               onTap: () {
                 Navigator.pop(ctx);
+                _showEditEntryDialog(context, ref, entry);
               },
             ),
             ListTile(

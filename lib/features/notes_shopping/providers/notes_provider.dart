@@ -132,6 +132,13 @@ class JournalNotifier extends AsyncNotifier<List<JournalEntry>> {
     ref.invalidate(daysWithEntriesProvider);
     await future;
   }
+
+  Future<void> updateEntry(JournalEntry entry) async {
+    await _db.updateJournalEntry(entry);
+    ref.invalidateSelf();
+    ref.invalidate(daysWithEntriesProvider);
+    await future;
+  }
 }
 
 // Provider for getting days with journal entries in a month
