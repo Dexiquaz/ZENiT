@@ -9,6 +9,7 @@ Future<TimeOfDay?> showZenitTimePicker({
 }) async {
   return showModalBottomSheet<TimeOfDay>(
     context: context,
+    isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (BuildContext context) {
       return _CupertinoStyleTimePicker(initialTime: initialTime);
@@ -88,7 +89,7 @@ class _CupertinoStyleTimePickerState extends State<_CupertinoStyleTimePicker> {
 
           // Picker
           SizedBox(
-            height: 200,
+            height: 260,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -160,7 +161,6 @@ class _CupertinoStyleTimePickerState extends State<_CupertinoStyleTimePicker> {
           ),
 
           // Bottom padding
-          const SizedBox(height: 16),
         ],
       ),
     );

@@ -1,25 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../shared/utils/time_picker_helper.dart';
 import '../models/habit.dart';
 import '../providers/habit_provider.dart';
-import '../../../shared/utils/time_picker_helper.dart';
 
-class AddHabitDialog extends ConsumerStatefulWidget {
-  const AddHabitDialog({super.key});
+class EditHabitSheet extends ConsumerStatefulWidget {
+  const EditHabitSheet({super.key, required this.habit});
+
+  final Habit habit;
 
   @override
-  ConsumerState<AddHabitDialog> createState() => _AddHabitDialogState();
+  ConsumerState<EditHabitSheet> createState() => _EditHabitSheetState();
 }
 
-class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
-  final _titleController = TextEditingController();
-  final _descController = TextEditingController();
-  final _categoryController = TextEditingController();
-  HabitRecurrence _recurrence = HabitRecurrence.daily;
-  bool _reminderEnabled = false;
-  TimeOfDay _reminderTime = const TimeOfDay(hour: 21, minute: 0);
-  int _weeklyReminderWeekday = DateTime.now().weekday;
-  int _monthlyReminderDay = DateTime.now().day;
+class _EditHabitSheetState extends ConsumerState<EditHabitSheet> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descController;
+  late final TextEditingController _categoryController;
+
+  late HabitRecurrence _recurrence;
+  late bool _reminderEnabled;
+  late TimeOfDay _reminderTime;
+  late int _weeklyReminderWeekday;
+  late int _monthlyReminderDay;
+
+  @override
+  void initState() {
+    super.initState();
+    final habit = widget.habit;
+    _titleController = TextEditingController(text: habit.title);
+    _descController = TextEditingController(text: habit.description);
+    _categoryController = TextEditingController(text: habit.category);
+
+    _recurrence = habit.recurrence;
+    _reminderEnabled = habit.reminderEnabled;
+    _reminderTime = TimeOfDay(
+      hour: habit.reminderHour ?? 21,
+      minute: habit.reminderMinute ?? 0,
+    );
+    _weeklyReminderWeekday = (habit.reminderWeekday ?? DateTime.now().weekday)
+        .clamp(1, 7)
+        .toInt();
+    _monthlyReminderDay = (habit.reminderDayOfMonth ?? DateTime.now().day)
+        .clamp(1, 31)
+        .toInt();
+  }
 
   @override
   void dispose() {
@@ -45,7 +71,7 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'NEW HABIT',
+                  'EDIT HABIT',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
@@ -187,8 +213,8 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
-                        onPressed: _createHabit,
-                        child: const Text('CREATE'),
+                        onPressed: _saveHabit,
+                        child: const Text('SAVE CHANGES'),
                       ),
                     ),
                   ],
@@ -201,13 +227,14 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
     );
   }
 
-  Future<void> _createHabit() async {
+  Future<void> _saveHabit() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
     final category = _categoryController.text.trim();
+    final notifier = ref.read(habitListProvider.notifier);
 
-    final newHabit = Habit(
+    final updatedHabit = widget.habit.copyWith(
       title: title,
       description: _descController.text.trim(),
       category: category.isEmpty ? 'General' : category,
@@ -222,9 +249,9 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
           _reminderEnabled && _recurrence == HabitRecurrence.monthly
           ? _monthlyReminderDay
           : null,
-      createdAt: DateTime.now(),
     );
-    await ref.read(habitListProvider.notifier).addHabit(newHabit);
+
+    await notifier.updateHabit(updatedHabit);
     if (mounted) {
       Navigator.pop(context);
     }
@@ -250,7 +277,6 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
   }
 
   Future<TimeOfDay?> _showReminderTimePicker(BuildContext context) async {
-    // Close any active text field keyboard to avoid constrained picker layouts.
     FocusScope.of(context).unfocus();
     await Future<void>.delayed(const Duration(milliseconds: 300));
 

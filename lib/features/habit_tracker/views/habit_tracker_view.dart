@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/habit_provider.dart';
 import '../widgets/add_habit_dialog.dart';
+import '../widgets/edit_habit_sheet.dart';
 import '../widgets/power_grid.dart';
 import '../models/habit.dart';
 
@@ -13,17 +14,26 @@ class HabitTrackerView extends ConsumerWidget {
     final habitState = ref.watch(habitListProvider);
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showDialog(
-          context: context,
-          builder: (context) => const AddHabitDialog(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: SizedBox(
+        width: MediaQuery.of(context).size.width - 48,
+        height: 50,
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (context) => const AddHabitDialog(),
+            );
+          },
+          label: const Text('NEW HABIT'),
+          icon: const Icon(Icons.add),
         ),
-        label: const Text('NEW HABIT'),
-        icon: const Icon(Icons.add),
       ),
       body: habitState.when(
         data: (habits) => SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 104),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -172,11 +182,29 @@ class _HabitCardState extends ConsumerState<_HabitCard> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20),
-                  onPressed: () => ref
-                      .read(habitListProvider.notifier)
-                      .deleteHabit(widget.habit.id!),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      onPressed: () {
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          builder: (context) {
+                            return EditHabitSheet(habit: widget.habit);
+                          },
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: () => ref
+                          .read(habitListProvider.notifier)
+                          .deleteHabit(widget.habit.id!),
+                    ),
+                  ],
                 ),
               ],
             ),
