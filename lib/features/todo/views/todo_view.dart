@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/utils/ui_helpers.dart';
+import '../../zen_mode/providers/focus_stats_provider.dart';
 import '../models/task_model.dart';
 import '../providers/todo_provider.dart';
 import '../widgets/task_detail_dialog.dart';
@@ -326,179 +327,213 @@ class _TaskTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      height: 120,
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        elevation: 0,
-        color: task.completed
-            ? Theme.of(
-                context,
-              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-            : Theme.of(context).colorScheme.surfaceContainerLow,
-        child: InkWell(
-          onTap: () =>
-              (context.findAncestorWidgetOfExactType<TodoView>() as TodoView)
-                  ._showTaskEditor(context, ref, task),
-          child: Padding(
-            padding: const EdgeInsets.only(
-              left: 12,
-              right: 12,
-              top: 12,
-              bottom: 12,
-            ),
-            child: Row(
-              children: [
-                // Checkbox - centered
-                SizedBox(
-                  height: double.infinity,
-                  child: Center(
-                    child: Checkbox(
-                      value: task.completed,
-                      onChanged: (v) =>
-                          ref.read(taskListProvider.notifier).toggleTask(task),
-                    ),
+    final focusStats = task.id == null
+        ? null
+        : ref.watch(taskFocusStatsProvider(task.id!));
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      color: task.completed
+          ? Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
+          : Theme.of(context).colorScheme.surfaceContainerLow,
+      child: InkWell(
+        onTap: () =>
+            (context.findAncestorWidgetOfExactType<TodoView>() as TodoView)
+                ._showTaskEditor(context, ref, task),
+        child: Padding(
+          padding: const EdgeInsets.only(
+            left: 12,
+            right: 12,
+            top: 12,
+            bottom: 12,
+          ),
+          child: Row(
+            children: [
+              // Checkbox - centered
+              SizedBox(
+                height: double.infinity,
+                child: Center(
+                  child: Checkbox(
+                    value: task.completed,
+                    onChanged: (v) =>
+                        ref.read(taskListProvider.notifier).toggleTask(task),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Title and subtitle - expanded
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        task.title,
-                        style: TextStyle(
-                          decoration: task.completed
-                              ? TextDecoration.lineThrough
-                              : null,
-                          color: task.completed
-                              ? Theme.of(context).colorScheme.onSurfaceVariant
-                              : Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 8),
+              // Title and subtitle - expanded
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      task.title,
+                      style: TextStyle(
+                        decoration: task.completed
+                            ? TextDecoration.lineThrough
+                            : null,
+                        color: task.completed
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    if (focusStats != null) ...[
+                      const SizedBox(height: 4),
+                      focusStats.when(
+                        data: (stats) => Text(
+                          'Today: ${stats.todayMinutes} min • This week: ${stats.weekCycles} cycles',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        loading: () => Text(
+                          'Loading focus stats...',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                        error: (_, __) => Text(
+                          'Focus stats unavailable',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                       ),
-                      if (task.dueDate != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 13,
+                    ],
+                    if (task.dueDate != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 13,
+                            color:
+                                task.dueDate!.isBefore(DateTime.now()) &&
+                                    !task.completed
+                                ? const Color(0xFFFB7185)
+                                : const Color(0xFFFACC15),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${task.dueDate!.year}.${task.dueDate!.month.toString().padLeft(2, '0')}.${task.dueDate!.day.toString().padLeft(2, '0')} @ ${task.dueDate!.hour.toString().padLeft(2, '0')}:${task.dueDate!.minute.toString().padLeft(2, '0')}',
+                            style: TextStyle(
                               color:
                                   task.dueDate!.isBefore(DateTime.now()) &&
                                       !task.completed
                                   ? const Color(0xFFFB7185)
                                   : const Color(0xFFFACC15),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '${task.dueDate!.year}.${task.dueDate!.month.toString().padLeft(2, '0')}.${task.dueDate!.day.toString().padLeft(2, '0')} @ ${task.dueDate!.hour.toString().padLeft(2, '0')}:${task.dueDate!.minute.toString().padLeft(2, '0')}',
-                              style: TextStyle(
-                                color:
-                                    task.dueDate!.isBefore(DateTime.now()) &&
-                                        !task.completed
-                                    ? const Color(0xFFFB7185)
-                                    : const Color(0xFFFACC15),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (task.reminderAt != null) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.notifications_active_outlined,
-                                size: 13,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Reminder enabled',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Priority chip and icons - centered
-                SizedBox(
-                  height: double.infinity,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _PriorityChip(priority: task.priority),
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: 24,
-                            child: IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              tooltip: task.pinned ? 'UNPIN' : 'PIN TO TOP 3',
-                              icon: Icon(
-                                task.pinned
-                                    ? Icons.push_pin
-                                    : Icons.push_pin_outlined,
-                                size: 18,
-                                color: task.pinned
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                              onPressed: task.completed
-                                  ? null
-                                  : () async {
-                                      final ok = await ref
-                                          .read(taskListProvider.notifier)
-                                          .setTaskPinned(task, !task.pinned);
-                                      if (!ok && context.mounted) {
-                                        showSnackBar(
-                                          context,
-                                          'You can pin up to 3 active tasks only.',
-                                        );
-                                      }
-                                    },
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          SizedBox(
-                            height: 24,
-                            child: IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () => ref
-                                  .read(taskListProvider.notifier)
-                                  .deleteTask(task.id!),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ],
                       ),
+                      if (task.reminderAt != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.notifications_active_outlined,
+                              size: 13,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Reminder enabled',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              // Priority chip and icons - centered
+              SizedBox(
+                height: double.infinity,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _PriorityChip(priority: task.priority),
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: task.pinned ? 'UNPIN' : 'PIN TO TOP 3',
+                            icon: Icon(
+                              task.pinned
+                                  ? Icons.push_pin
+                                  : Icons.push_pin_outlined,
+                              size: 18,
+                              color: task.pinned
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            onPressed: task.completed
+                                ? null
+                                : () async {
+                                    final ok = await ref
+                                        .read(taskListProvider.notifier)
+                                        .setTaskPinned(task, !task.pinned);
+                                    if (!ok && context.mounted) {
+                                      showSnackBar(
+                                        context,
+                                        'You can pin up to 3 active tasks only.',
+                                      );
+                                    }
+                                  },
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 24,
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: () => ref
+                                .read(taskListProvider.notifier)
+                                .deleteTask(task.id!),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

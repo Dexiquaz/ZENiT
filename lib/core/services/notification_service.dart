@@ -27,6 +27,10 @@ class NotificationService {
   static const String _journalChannelName = 'Journal prompts';
   static const String _journalChannelDescription =
       'Daily reflection prompts for ZENiT journal';
+  static const String _focusChannelId = 'zenit_focus_transitions_v1';
+  static const String _focusChannelName = 'Focus transitions';
+  static const String _focusChannelDescription =
+      'Alerts when focus sessions switch between focus and break phases';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -126,6 +130,49 @@ class NotificationService {
       await initialize();
     }
     await _plugin.cancelAll();
+  }
+
+  Future<void> showFocusPhaseTransitionAlert({
+    required bool toBreak,
+    required Duration nextDuration,
+    String? taskTitle,
+  }) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+
+    final minutes = nextDuration.inMinutes.clamp(1, 9999);
+    final minutesLabel = minutes == 1 ? '1 minute' : '$minutes minutes';
+    final linkedTaskSuffix = (taskTitle != null && taskTitle.trim().isNotEmpty)
+        ? ' • ${taskTitle.trim()}'
+        : '';
+
+    final title = toBreak
+        ? 'Focus complete. Break starts now.'
+        : 'Break complete. Back to focus.';
+    final body = toBreak
+        ? 'Take a $minutesLabel break$linkedTaskSuffix.'
+        : 'Start a $minutesLabel focus block$linkedTaskSuffix.';
+
+    await _plugin.show(
+      _focusTransitionNotificationId,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _focusChannelId,
+          _focusChannelName,
+          channelDescription: _focusChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          category: AndroidNotificationCategory.alarm,
+        ),
+      ),
+      payload: 'focus:transition',
+    );
   }
 
   Future<void> scheduleHabitReminder({
@@ -320,6 +367,7 @@ class NotificationService {
   int _taskNotificationId(int taskId) => 100000 + taskId;
   int _habitNotificationId(int habitId) => 200000 + habitId;
   static const int _journalNotificationId = 300000;
+  static const int _focusTransitionNotificationId = 400000;
 
   bool _supportsNotifications() {
     return defaultTargetPlatform == TargetPlatform.android ||
@@ -376,9 +424,20 @@ class NotificationService {
       enableVibration: true,
     );
 
+    // Create focus transition channel
+    const focusChannel = AndroidNotificationChannel(
+      _focusChannelId,
+      _focusChannelName,
+      description: _focusChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
     await androidPlugin.createNotificationChannel(taskChannel);
     await androidPlugin.createNotificationChannel(habitChannel);
     await androidPlugin.createNotificationChannel(journalChannel);
+    await androidPlugin.createNotificationChannel(focusChannel);
   }
 
   Future<void> _requestPermissions() async {

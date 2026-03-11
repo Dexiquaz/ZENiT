@@ -545,4 +545,43 @@ class DatabaseHelper {
         0;
     return totalSeconds;
   }
+
+  Future<Map<String, int>> getTaskFocusStatsInRange(
+    int taskId, {
+    required DateTime startInclusive,
+    required DateTime endExclusive,
+  }) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(focus_duration_seconds * completed_focus_sessions), 0) AS total_seconds,
+        COALESCE(SUM(completed_focus_sessions), 0) AS total_cycles
+      FROM focus_sessions
+      WHERE task_id = ?
+        AND status != ?
+        AND started_at >= ?
+        AND started_at < ?
+      ''',
+      [
+        taskId,
+        FocusSessionStatus.cancelled.index,
+        startInclusive.toIso8601String(),
+        endExclusive.toIso8601String(),
+      ],
+    );
+
+    final row = rows.isNotEmpty ? rows.first : const <String, Object?>{};
+
+    int parseInt(Object? value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    return {
+      'totalSeconds': parseInt(row['total_seconds']),
+      'totalCycles': parseInt(row['total_cycles']),
+    };
+  }
 }

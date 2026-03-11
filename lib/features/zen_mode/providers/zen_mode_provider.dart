@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/utils/database_helper.dart';
 import '../models/focus_session.dart';
+
+enum FocusStartResult { started, missingLinkedTask, linkedTaskUnavailable }
 
 class ZenTimerState {
   static const _unset = Object();
@@ -140,6 +143,7 @@ final zenTimerProvider = NotifierProvider<ZenTimerNotifier, ZenTimerState>(
 
 class ZenTimerNotifier extends Notifier<ZenTimerState> {
   final _db = DatabaseHelper();
+  final _notifications = NotificationService.instance;
   Timer? _ticker;
 
   @override
@@ -164,7 +168,41 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
     return initialState;
   }
 
-  Future<void> startFocus({int? taskId, String? taskTitle}) async {
+  Future<FocusStartResult> startLinkedFocus() async {
+    return _startFocusSession(requireLinkedTask: true);
+  }
+
+  Future<FocusStartResult> startQuickFocus() async {
+    return _startFocusSession(requireLinkedTask: false);
+  }
+
+  Future<FocusStartResult> _startFocusSession({
+    required bool requireLinkedTask,
+  }) async {
+    int? taskId;
+    String? taskTitle;
+
+    if (requireLinkedTask) {
+      taskId = state.linkedTaskId;
+      taskTitle = state.linkedTaskTitle;
+
+      if (taskId == null) {
+        if (state.hasLinkedTask) {
+          state = state.copyWith(linkedTaskId: null, linkedTaskTitle: null);
+        }
+        return FocusStartResult.missingLinkedTask;
+      }
+
+      final task = await _db.getTaskById(taskId);
+      if (task == null || task.completed) {
+        state = state.copyWith(linkedTaskId: null, linkedTaskTitle: null);
+        await _persistActiveSession();
+        return FocusStartResult.linkedTaskUnavailable;
+      }
+
+      taskTitle = task.title;
+    }
+
     _stopTicker();
 
     await _finalizeActiveSession();
@@ -195,6 +233,7 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
       sessionStartedAt: now,
     );
     _startTicker();
+    return FocusStartResult.started;
   }
 
   Future<void> pause() async {
@@ -206,7 +245,11 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
   }
 
   Future<void> setLinkedTask({int? taskId, String? taskTitle}) async {
-    if (state.hasStarted) return;
+    if (state.isRunning) return;
+
+    if (state.linkedTaskId == taskId && state.linkedTaskTitle == taskTitle) {
+      return;
+    }
 
     state = state.copyWith(linkedTaskId: taskId, linkedTaskTitle: taskTitle);
     await _persistActiveSession();
@@ -332,6 +375,8 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
   Future<void> _advancePhase({required bool startRunning}) async {
     _stopTicker();
 
+    final previousPhase = state.phase;
+
     if (state.phase == FocusSessionPhase.focus) {
       state = state.copyWith(
         phase: FocusSessionPhase.breakTime,
@@ -348,10 +393,31 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
     }
 
     await _persistActiveSession();
+    await _notifyPhaseTransition(
+      from: previousPhase,
+      to: state.phase,
+      nextDuration: state.remaining,
+      taskTitle: state.linkedTaskTitle,
+    );
 
     if (startRunning) {
       _startTicker();
     }
+  }
+
+  Future<void> _notifyPhaseTransition({
+    required FocusSessionPhase from,
+    required FocusSessionPhase to,
+    required Duration nextDuration,
+    String? taskTitle,
+  }) async {
+    if (from == to) return;
+
+    await _notifications.showFocusPhaseTransitionAlert(
+      toBreak: to == FocusSessionPhase.breakTime,
+      nextDuration: nextDuration,
+      taskTitle: taskTitle,
+    );
   }
 
   Future<void> _persistActiveSession() async {

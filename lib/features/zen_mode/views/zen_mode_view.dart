@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../todo/models/task_model.dart';
 import '../../todo/providers/todo_provider.dart';
+import '../models/focus_session.dart';
+import '../providers/focus_history_provider.dart';
+import '../providers/focus_stats_provider.dart';
 import '../providers/zen_mode_provider.dart';
 
 class ZenModeView extends ConsumerWidget {
@@ -13,6 +16,10 @@ class ZenModeView extends ConsumerWidget {
     final state = ref.watch(zenTimerProvider);
     final notifier = ref.read(zenTimerProvider.notifier);
     final taskState = ref.watch(allTaskListProvider);
+    final linkedTaskStats = state.linkedTaskId == null
+        ? null
+        : ref.watch(taskFocusStatsProvider(state.linkedTaskId!));
+    final recentSessions = ref.watch(recentFocusSessionsProvider);
     final focusMinutes = state.focusDuration.inMinutes.clamp(1, 60).toInt();
     final breakMinutes = state.breakDuration.inMinutes.clamp(1, 30).toInt();
 
@@ -149,9 +156,9 @@ class ZenModeView extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          state.hasStarted
-                              ? 'Task is locked while this session is active or paused.'
-                              : 'Pick what you will work on before starting focus.',
+                          state.isRunning
+                              ? 'Task is locked while the timer is running.'
+                              : 'Link a task for tracked work, or use Quick Focus anytime.',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: Theme.of(
@@ -165,8 +172,7 @@ class ZenModeView extends ConsumerWidget {
                           runSpacing: 10,
                           children: [
                             OutlinedButton.icon(
-                              onPressed:
-                                  state.hasStarted || pendingTasks.isEmpty
+                              onPressed: state.isRunning || pendingTasks.isEmpty
                                   ? null
                                   : () => _showTaskPicker(
                                       context,
@@ -178,8 +184,7 @@ class ZenModeView extends ConsumerWidget {
                               label: const Text('SELECT TASK'),
                             ),
                             OutlinedButton.icon(
-                              onPressed:
-                                  state.hasStarted || !state.hasLinkedTask
+                              onPressed: state.isRunning || !state.hasLinkedTask
                                   ? null
                                   : () => notifier.clearLinkedTask(),
                               icon: const Icon(Icons.close),
@@ -216,26 +221,32 @@ class ZenModeView extends ConsumerWidget {
               spacing: 10,
               runSpacing: 10,
               children: [
-                FilledButton.icon(
-                  onPressed: state.isRunning
-                      ? () => notifier.pause()
-                      : (state.isIdle
-                            ? () => notifier.startFocus(
-                                taskId: state.linkedTaskId,
-                                taskTitle: state.linkedTaskTitle,
-                              )
-                            : () => notifier.resume()),
-                  icon: Icon(
-                    state.isRunning
-                        ? Icons.pause
-                        : (state.isIdle ? Icons.play_arrow : Icons.play_circle),
+                if (state.isRunning)
+                  FilledButton.icon(
+                    onPressed: () => notifier.pause(),
+                    icon: const Icon(Icons.pause),
+                    label: const Text('PAUSE'),
+                  )
+                else if (!state.isIdle)
+                  FilledButton.icon(
+                    onPressed: () => notifier.resume(),
+                    icon: const Icon(Icons.play_circle),
+                    label: const Text('RESUME'),
+                  )
+                else ...[
+                  FilledButton.icon(
+                    onPressed: state.linkedTaskId == null
+                        ? null
+                        : () => _startLinkedFocus(context, notifier),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('START WITH TASK'),
                   ),
-                  label: Text(
-                    state.isRunning
-                        ? 'PAUSE'
-                        : (state.isIdle ? 'START FOCUS' : 'RESUME'),
+                  OutlinedButton.icon(
+                    onPressed: () => _startQuickFocus(context, notifier),
+                    icon: const Icon(Icons.flash_on),
+                    label: const Text('QUICK FOCUS'),
                   ),
-                ),
+                ],
                 OutlinedButton.icon(
                   onPressed: state.hasStarted ? () => notifier.reset() : null,
                   icon: const Icon(Icons.restart_alt),
@@ -249,6 +260,76 @@ class ZenModeView extends ConsumerWidget {
                   label: const Text('SKIP'),
                 ),
               ],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'RECENT SESSIONS',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                letterSpacing: 2.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: recentSessions.when(
+                  data: (sessions) {
+                    if (sessions.isEmpty) {
+                      return Text(
+                        'No focus sessions yet. Start one to build momentum.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: sessions
+                          .map(
+                            (session) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              leading: Icon(
+                                Icons.history,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              title: Text(
+                                session.taskTitleSnapshot?.isNotEmpty == true
+                                    ? session.taskTitleSnapshot!
+                                    : 'Quick Focus',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                '${_formatSessionDate(session.startedAt)} • ${_sessionMinutesLabel(session)} • ${session.completedFocusSessions} cycles • ${_statusLabel(session.status)}',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
+                    );
+                  },
+                  loading: () => const SizedBox(
+                    height: 48,
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) => Text(
+                    'Could not load session history.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 32),
             Text(
@@ -337,9 +418,72 @@ class ZenModeView extends ConsumerWidget {
                 ),
               ),
             ),
+            if (linkedTaskStats != null) ...[
+              const SizedBox(height: 4),
+              linkedTaskStats.when(
+                data: (stats) => Text(
+                  'Today: ${stats.todayMinutes} min • This week: ${stats.weekCycles} cycles',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                loading: () => Text(
+                  'Loading focus stats...',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                error: (_, __) => Text(
+                  'Focus stats unavailable',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _startLinkedFocus(
+    BuildContext context,
+    ZenTimerNotifier notifier,
+  ) async {
+    final result = await notifier.startLinkedFocus();
+    if (!context.mounted) return;
+
+    switch (result) {
+      case FocusStartResult.started:
+        return;
+      case FocusStartResult.missingLinkedTask:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Select a task to begin linked focus.')),
+        );
+      case FocusStartResult.linkedTaskUnavailable:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Linked task is no longer available. Select another.',
+            ),
+          ),
+        );
+    }
+  }
+
+  Future<void> _startQuickFocus(
+    BuildContext context,
+    ZenTimerNotifier notifier,
+  ) async {
+    final result = await notifier.startQuickFocus();
+    if (!context.mounted || result == FocusStartResult.started) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Unable to start quick focus right now.')),
     );
   }
 
@@ -386,5 +530,34 @@ class ZenModeView extends ConsumerWidget {
         taskTitle: selectedTask.title,
       );
     }
+  }
+
+  String _statusLabel(FocusSessionStatus status) {
+    switch (status) {
+      case FocusSessionStatus.running:
+        return 'running';
+      case FocusSessionStatus.paused:
+        return 'paused';
+      case FocusSessionStatus.completed:
+        return 'completed';
+      case FocusSessionStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
+  String _sessionMinutesLabel(FocusSession session) {
+    final minutes =
+        (session.focusDuration.inSeconds * session.completedFocusSessions) ~/
+        60;
+    return '$minutes min';
+  }
+
+  String _formatSessionDate(DateTime timestamp) {
+    final year = timestamp.year.toString();
+    final month = timestamp.month.toString().padLeft(2, '0');
+    final day = timestamp.day.toString().padLeft(2, '0');
+    final hour = timestamp.hour.toString().padLeft(2, '0');
+    final minute = timestamp.minute.toString().padLeft(2, '0');
+    return '$year.$month.$day $hour:$minute';
   }
 }
