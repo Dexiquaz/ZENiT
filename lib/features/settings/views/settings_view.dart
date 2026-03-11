@@ -195,7 +195,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               ),
             ),
             const SizedBox(height: 32),
-            _buildSectionHeader(context, 'PRIVACY'),
+            _buildSectionHeader(context, 'DATA'),
             const SizedBox(height: 16),
             Card(
               child: Column(
@@ -240,13 +240,6 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
             Card(
               child: Column(
                 children: [
-                  _buildListTile(
-                    context,
-                    title: 'Theme Mode',
-                    subtitle: 'Dark (Fixed)',
-                    icon: Icons.dark_mode_outlined,
-                  ),
-                  dividerListTile,
                   _buildListTile(
                     context,
                     title: 'Version',

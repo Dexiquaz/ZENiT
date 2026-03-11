@@ -11,6 +11,7 @@ import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
 import '../../zen_mode/providers/zen_mode_provider.dart';
 import '../../zen_mode/widgets/zen_quick_sheet.dart';
+import '../../../core/theme/app_colors.dart';
 
 class DashboardView extends ConsumerWidget {
   const DashboardView({super.key});
@@ -130,7 +131,7 @@ class DashboardView extends ConsumerWidget {
               summaryValue: '$completedTodayCount / ${habits.length}',
               summarySubtitle: 'today',
               details: habits.isEmpty
-                  ? const Text('No habits yet. Add your first protocol.')
+                  ? const Text('No habits yet. add your first habit')
                   : hasPending
                   ? Text(
                       'Pending: ${pending.take(2).map((h) => h.title).join(', ')}${pending.length > 2 ? '...' : ''}',
@@ -165,7 +166,7 @@ class DashboardView extends ConsumerWidget {
                   ? 'pending'
                   : 'pending • top ${pinned.length}',
               details: pending.isEmpty
-                  ? const Text('All task sequences resolved.')
+                  ? const Text('All tasks completed.')
                   : pinned.isNotEmpty
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +190,7 @@ class DashboardView extends ConsumerWidget {
                                 const Icon(
                                   Icons.circle,
                                   size: 4,
-                                  color: Colors.grey,
+                                  color: AppColors.textSecondary,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
