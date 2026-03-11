@@ -240,8 +240,10 @@ class TodoView extends ConsumerWidget {
     Task? task,
   ]) async {
     final selectedProject = ref.read(selectedProjectProvider);
-    final result = await showDialog<Task>(
+    final result = await showModalBottomSheet<Task>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) =>
           TaskDetailDialog(task: task, initialProjectId: selectedProject),
     );
