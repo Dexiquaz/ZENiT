@@ -27,6 +27,10 @@ class NotificationService {
   static const String _journalChannelName = 'Journal prompts';
   static const String _journalChannelDescription =
       'Daily reflection prompts for ZENiT journal';
+  static const String _billChannelId = 'zenit_bill_reminders_v1';
+  static const String _billChannelName = 'Bill reminders';
+  static const String _billChannelDescription =
+      'Due date reminders for bills in ZENiT';
   static const String _focusChannelId = 'zenit_focus_transitions_v1';
   static const String _focusChannelName = 'Focus transitions';
   static const String _focusChannelDescription =
@@ -122,6 +126,75 @@ class NotificationService {
       await initialize();
     }
     await _plugin.cancel(_taskNotificationId(taskId));
+  }
+
+  Future<void> scheduleBillReminder({
+    required int billId,
+    required String billTitle,
+    required DateTime reminderAt,
+  }) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+
+    final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
+    if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
+      return;
+    }
+
+    try {
+      await _plugin.zonedSchedule(
+        _billNotificationId(billId),
+        'Bill reminder',
+        billTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _billChannelId,
+            _billChannelName,
+            channelDescription: _billChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'bill:$billId',
+        matchDateTimeComponents: null,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling bill reminder: $e');
+      await _plugin.zonedSchedule(
+        _billNotificationId(billId),
+        'Bill reminder',
+        billTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _billChannelId,
+            _billChannelName,
+            channelDescription: _billChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'bill:$billId',
+        matchDateTimeComponents: null,
+      );
+    }
+  }
+
+  Future<void> cancelBillReminder(int billId) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+    await _plugin.cancel(_billNotificationId(billId));
   }
 
   Future<void> cancelAll() async {
@@ -368,6 +441,7 @@ class NotificationService {
   int _habitNotificationId(int habitId) => 200000 + habitId;
   static const int _journalNotificationId = 300000;
   static const int _focusTransitionNotificationId = 400000;
+  int _billNotificationId(int billId) => 500000 + billId;
 
   bool _supportsNotifications() {
     return defaultTargetPlatform == TargetPlatform.android ||
@@ -424,6 +498,16 @@ class NotificationService {
       enableVibration: true,
     );
 
+    // Create bill reminders channel
+    const billChannel = AndroidNotificationChannel(
+      _billChannelId,
+      _billChannelName,
+      description: _billChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
     // Create focus transition channel
     const focusChannel = AndroidNotificationChannel(
       _focusChannelId,
@@ -437,6 +521,7 @@ class NotificationService {
     await androidPlugin.createNotificationChannel(taskChannel);
     await androidPlugin.createNotificationChannel(habitChannel);
     await androidPlugin.createNotificationChannel(journalChannel);
+    await androidPlugin.createNotificationChannel(billChannel);
     await androidPlugin.createNotificationChannel(focusChannel);
   }
 

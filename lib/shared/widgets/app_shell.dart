@@ -15,6 +15,37 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   late int _lastSelectedNavIndex = 0;
 
+  Future<void> _handleBackPress(int currentIndex) async {
+    if (currentIndex != 0) {
+      widget.navigationShell.goBranch(0);
+      return;
+    }
+
+    final shouldExit =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exit ZENiT?'),
+            content: const Text('Do you want to close the app?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (shouldExit) {
+      SystemNavigator.pop();
+    }
+  }
+
   String _getModuleName(int index) {
     switch (index) {
       case 0:
@@ -50,16 +81,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
+      onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
 
-        // If not on dashboard, navigate to dashboard
-        if (currentIndex != 0) {
-          widget.navigationShell.goBranch(0);
-        } else {
-          // Already on dashboard, exit the app
-          SystemNavigator.pop();
-        }
+        await _handleBackPress(widget.navigationShell.currentIndex);
       },
       child: Scaffold(
         appBar: AppBar(

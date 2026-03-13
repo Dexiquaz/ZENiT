@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../models/bill_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/finance_provider.dart';
+import '../widgets/bill_detail_sheet.dart';
 
 class FinanceView extends ConsumerWidget {
   const FinanceView({super.key});
@@ -11,6 +13,7 @@ class FinanceView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final txState = ref.watch(transactionListProvider);
+    final billState = ref.watch(billListProvider);
     final settings =
         ref.watch(settingsProvider).asData?.value ?? UserSettings();
     final currency = settings.currency;
@@ -27,21 +30,203 @@ class FinanceView extends ConsumerWidget {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: txState.when(
-        data: (transactions) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildStatCards(context, transactions, currency),
-              const SizedBox(height: 32),
-              _buildChartSection(context, transactions),
-              const SizedBox(height: 32),
-              _buildTransactionLog(context, transactions, ref, currency),
-            ],
+        data: (transactions) => billState.when(
+          data: (bills) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildStatCards(context, transactions, currency),
+                const SizedBox(height: 32),
+                _buildChartSection(context, transactions),
+                const SizedBox(height: 32),
+                _buildBillsSection(context, ref, bills, currency),
+                const SizedBox(height: 32),
+                _buildTransactionLog(context, transactions, ref, currency),
+              ],
+            ),
           ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('ERROR // $e')),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('ERROR // $e')),
+      ),
+    );
+  }
+
+  Widget _buildBillsSection(
+    BuildContext context,
+    WidgetRef ref,
+    List<Bill> bills,
+    String currency,
+  ) {
+    final now = DateTime.now();
+    final overdue = bills.where((b) => b.isOverdue(now: now)).toList();
+    final unpaidUpcoming = bills
+        .where((b) => !b.paid && !b.isOverdue(now: now))
+        .toList();
+    final paid = bills.where((b) => b.paid).toList();
+
+    unpaidUpcoming.sort((a, b) {
+      final aDue = a.nextDueDate(from: now) ?? a.dueDate;
+      final bDue = b.nextDueDate(from: now) ?? b.dueDate;
+      return aDue.compareTo(bDue);
+    });
+
+    paid.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'BILL REMINDERS',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _showBillEditor(context, ref, currency),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('ADD BILL'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (bills.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('NO BILLS YET')),
+            ),
+          ),
+        if (overdue.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('OVERDUE'),
+          ),
+          ...overdue.map(
+            (bill) => _BillTile(
+              bill: bill,
+              currency: currency,
+              dueLabel: _formatBillDueLabel(bill, now),
+              onEdit: () => _showBillEditor(context, ref, currency, bill),
+              onTogglePaid: () => ref
+                  .read(billListProvider.notifier)
+                  .toggleBillPaid(bill, !bill.paid),
+              onDelete: () => _showDeleteBillConfirm(context, ref, bill),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (unpaidUpcoming.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('UPCOMING'),
+          ),
+          ...unpaidUpcoming.map(
+            (bill) => _BillTile(
+              bill: bill,
+              currency: currency,
+              dueLabel: _formatBillDueLabel(bill, now),
+              onEdit: () => _showBillEditor(context, ref, currency, bill),
+              onTogglePaid: () => ref
+                  .read(billListProvider.notifier)
+                  .toggleBillPaid(bill, !bill.paid),
+              onDelete: () => _showDeleteBillConfirm(context, ref, bill),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (paid.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('PAID'),
+          ),
+          ...paid
+              .take(5)
+              .map(
+                (bill) => _BillTile(
+                  bill: bill,
+                  currency: currency,
+                  dueLabel: 'PAID',
+                  onEdit: () => _showBillEditor(context, ref, currency, bill),
+                  onTogglePaid: () => ref
+                      .read(billListProvider.notifier)
+                      .toggleBillPaid(bill, !bill.paid),
+                  onDelete: () => _showDeleteBillConfirm(context, ref, bill),
+                ),
+              ),
+        ],
+      ],
+    );
+  }
+
+  String _formatBillDueLabel(Bill bill, DateTime now) {
+    final due = bill.recurrence == BillRecurrence.monthly
+        ? (bill.nextDueDate(from: now) ?? bill.dueDate)
+        : bill.dueDate;
+    final date =
+        '${due.year}.${due.month.toString().padLeft(2, '0')}.${due.day.toString().padLeft(2, '0')}';
+    final time =
+        '${due.hour.toString().padLeft(2, '0')}:${due.minute.toString().padLeft(2, '0')}';
+    final recurrence = bill.recurrence == BillRecurrence.monthly
+        ? 'MONTHLY'
+        : 'ONE-TIME';
+    return '$recurrence • $date $time';
+  }
+
+  Future<void> _showBillEditor(
+    BuildContext context,
+    WidgetRef ref,
+    String currency, [
+    Bill? bill,
+  ]) async {
+    final result = await showModalBottomSheet<Bill>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => BillDetailSheet(bill: bill, currency: currency),
+    );
+
+    if (result == null) {
+      return;
+    }
+
+    if (bill == null) {
+      await ref.read(billListProvider.notifier).addBill(result);
+    } else {
+      await ref.read(billListProvider.notifier).updateBill(result);
+    }
+  }
+
+  void _showDeleteBillConfirm(BuildContext context, WidgetRef ref, Bill bill) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('DELETE BILL?'),
+        content: Text('DELETE "${bill.title}"? THIS CANNOT BE UNDONE.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () {
+              ref.read(billListProvider.notifier).deleteBill(bill.id!);
+              Navigator.pop(ctx);
+            },
+            child: const Text('DELETE'),
+          ),
+        ],
       ),
     );
   }
@@ -328,6 +513,73 @@ class _TransactionTile extends StatelessWidget {
               onPressed: () => ref
                   .read(transactionListProvider.notifier)
                   .deleteTransaction(t.id!),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BillTile extends StatelessWidget {
+  final Bill bill;
+  final String currency;
+  final String dueLabel;
+  final VoidCallback onEdit;
+  final VoidCallback onTogglePaid;
+  final VoidCallback onDelete;
+
+  const _BillTile({
+    required this.bill,
+    required this.currency,
+    required this.dueLabel,
+    required this.onEdit,
+    required this.onTogglePaid,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: onEdit,
+        leading: CircleAvatar(
+          backgroundColor: bill.paid
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).colorScheme.secondaryContainer,
+          child: Icon(
+            bill.paid ? Icons.check : Icons.receipt_long,
+            color: bill.paid
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.secondary,
+          ),
+        ),
+        title: Text(bill.title),
+        subtitle: Text(
+          '$dueLabel • LEAD ${bill.leadMinutes}M',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$currency${bill.amount.toStringAsFixed(2)}',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: Icon(
+                bill.paid ? Icons.undo : Icons.check_circle_outline,
+                size: 20,
+              ),
+              onPressed: onTogglePaid,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: onDelete,
             ),
           ],
         ),

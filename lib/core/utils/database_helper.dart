@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart' hide Transaction;
 import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
+import '../../features/finance/models/bill_model.dart';
 import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
 import '../../features/zen_mode/models/focus_session.dart';
@@ -24,7 +25,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'personal_organizer.db');
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -70,6 +71,26 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT, amount REAL,
         category TEXT, is_income INTEGER, date TEXT
       )''');
+    await db.execute('''
+      CREATE TABLE bills(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        amount REAL NOT NULL,
+        due_date TEXT NOT NULL,
+        recurrence INTEGER NOT NULL DEFAULT 0,
+        reminder_enabled INTEGER NOT NULL DEFAULT 1,
+        lead_minutes INTEGER NOT NULL DEFAULT 0,
+        paid INTEGER NOT NULL DEFAULT 0,
+        paid_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bills_paid ON bills(paid)',
+    );
     await db.execute('''
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT,
@@ -214,6 +235,28 @@ class DatabaseHelper {
         completed_at TEXT,
         FOREIGN KEY(task_id) REFERENCES tasks(id)
       )''');
+    }
+
+    if (oldVersion < 8) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS bills(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        amount REAL NOT NULL,
+        due_date TEXT NOT NULL,
+        recurrence INTEGER NOT NULL DEFAULT 0,
+        reminder_enabled INTEGER NOT NULL DEFAULT 1,
+        lead_minutes INTEGER NOT NULL DEFAULT 0,
+        paid INTEGER NOT NULL DEFAULT 0,
+        paid_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_bills_paid ON bills(paid)',
+      );
     }
   }
 
@@ -366,6 +409,30 @@ class DatabaseHelper {
     where: 'id = ?',
     whereArgs: [id],
   );
+
+  // ── Bills ──
+  Future<int> insertBill(Bill bill) async =>
+      (await database).insert('bills', bill.toMap());
+
+  Future<List<Bill>> getBills({bool includePaid = true}) async {
+    final db = await database;
+    final maps = await db.query(
+      'bills',
+      where: includePaid ? null : 'paid = 0',
+      orderBy: 'paid ASC, due_date ASC',
+    );
+    return maps.map(Bill.fromMap).toList();
+  }
+
+  Future<int> updateBill(Bill bill) async => (await database).update(
+    'bills',
+    bill.toMap(),
+    where: 'id = ?',
+    whereArgs: [bill.id],
+  );
+
+  Future<int> deleteBill(int id) async =>
+      (await database).delete('bills', where: 'id = ?', whereArgs: [id]);
 
   // ── Notes ──
   Future<int> insertNote(Note n) async =>
