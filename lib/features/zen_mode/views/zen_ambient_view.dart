@@ -35,6 +35,7 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
 
   Timer? _hideControlsTimer;
   bool _controlsVisible = true;
+  bool _isClosingRoute = false;
 
   @override
   void initState() {
@@ -58,6 +59,25 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
   Future<void> _exitAmbientPresentation() async {
     await WakelockPlus.disable();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+
+  Future<void> _requestCloseAmbient() async {
+    if (!mounted || _isClosingRoute) return;
+    _isClosingRoute = true;
+
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+
+    final route = ModalRoute.of(context);
+    if (route?.isCurrent != true) {
+      _isClosingRoute = false;
+      return;
+    }
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 
   void _showControlsTemporarily() {
@@ -94,200 +114,230 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
   Widget build(BuildContext context) {
     final state = ref.watch(zenTimerProvider);
     final notifier = ref.read(zenTimerProvider.notifier);
+    ref.listen<ZenTimerState>(zenTimerProvider, (previous, next) {
+      final hadSession = previous?.activeSessionId != null;
+      final hasSession = next.activeSessionId != null;
+      if (hadSession && !hasSession) {
+        unawaited(_requestCloseAmbient());
+      }
+    });
     final colorScheme = Theme.of(context).colorScheme;
     final aodBackground = colorScheme.scrim.withValues(alpha: 1);
-    final mutedPrimary = colorScheme.primary.withValues(alpha: 0.78);
-    final strongText = colorScheme.onSurface.withValues(alpha: 0.9);
-    final softText = colorScheme.onSurface.withValues(alpha: 0.62);
+    final isDarkBackground =
+        ThemeData.estimateBrightnessForColor(aodBackground) == Brightness.dark;
+    final baseForeground = isDarkBackground ? Colors.white : Colors.black;
+    final strongText = baseForeground.withValues(alpha: 0.9);
+    final softText = baseForeground.withValues(alpha: 0.62);
+    final mutedPrimary = Color.alphaBlend(
+      baseForeground.withValues(alpha: 0.12),
+      colorScheme.primary,
+    ).withValues(alpha: 0.88);
     final timeParts = state.timeLabel.split(':');
     final minuteLabel = timeParts.isNotEmpty ? timeParts.first : '00';
     final secondLabel = timeParts.length > 1 ? timeParts.last : '00';
 
-    if (state.activeSessionId == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-      });
-    }
+    Future<void> closeAmbient() => _requestCloseAmbient();
 
     final drift = _currentDriftOffset(state);
 
-    return Scaffold(
-      backgroundColor: aodBackground,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _toggleControls,
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Center(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeInOut,
-                  transform: Matrix4.translationValues(drift.dx, drift.dy, 0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        state.phaseLabel,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: mutedPrimary,
-                              letterSpacing: 3,
-                              fontWeight: FontWeight.w800,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (_, __) {
+        _hideControlsTimer?.cancel();
+      },
+      child: Scaffold(
+        backgroundColor: aodBackground,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggleControls,
+          child: SafeArea(
+            child: Stack(
+              children: [
+                Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 700),
+                    curve: Curves.easeInOut,
+                    transform: Matrix4.translationValues(drift.dx, drift.dy, 0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          state.phaseLabel,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: mutedPrimary,
+                                letterSpacing: 3,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _ClockPanel(
+                              value: minuteLabel,
+                              textColor: strongText,
                             ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ClockPanel(value: minuteLabel),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                ':',
+                                style: Theme.of(context).textTheme.displaySmall
+                                    ?.copyWith(
+                                      color: strongText.withValues(alpha: 0.7),
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                              ),
+                            ),
+                            _ClockPanel(
+                              value: secondLabel,
+                              textColor: strongText,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          state.isRunning
+                              ? 'Focus session active'
+                              : '${state.phaseLabel} paused',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(color: softText),
+                        ),
+                        if (state.hasLinkedTask) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: 280,
                             child: Text(
-                              ':',
-                              style: Theme.of(context).textTheme.displaySmall
+                              state.linkedTaskTitle ?? 'Linked task',
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge
                                   ?.copyWith(
-                                    color: strongText.withValues(alpha: 0.7),
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w700,
+                                    color: strongText,
                                   ),
                             ),
                           ),
-                          _ClockPanel(value: secondLabel),
                         ],
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        state.isRunning
-                            ? 'Focus session active'
-                            : '${state.phaseLabel} paused',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: softText),
-                      ),
-                      if (state.hasLinkedTask) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         SizedBox(
-                          width: 280,
-                          child: Text(
-                            state.linkedTaskTitle ?? 'Linked task',
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: strongText,
-                                ),
+                          width: 240,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              value: state.progress,
+                              backgroundColor: strongText.withValues(
+                                alpha: 0.12,
+                              ),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                mutedPrimary.withValues(alpha: 0.7),
+                              ),
+                            ),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: 240,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(99),
-                          child: LinearProgressIndicator(
-                            minHeight: 3,
-                            value: state.progress,
-                            backgroundColor: colorScheme.onSurface.withValues(
-                              alpha: 0.08,
-                            ),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              mutedPrimary.withValues(alpha: 0.5),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 20,
-                child: AnimatedOpacity(
-                  opacity: _controlsVisible ? 1 : 0,
-                  duration: const Duration(milliseconds: 180),
-                  child: IgnorePointer(
-                    ignoring: !_controlsVisible,
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainer.withValues(
-                          alpha: 0.35,
+                if (!_controlsVisible)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 8,
+                    child: Center(
+                      child: Text(
+                        'Tap to show controls',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: softText,
+                          fontWeight: FontWeight.w600,
                         ),
-                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          if (state.isRunning)
-                            FilledButton.icon(
-                              onPressed: () {
-                                notifier.pause();
-                                _showControlsTemporarily();
-                              },
-                              icon: const Icon(Icons.pause),
-                              label: const Text('PAUSE'),
-                            )
-                          else
-                            FilledButton.icon(
+                    ),
+                  ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 20,
+                  child: AnimatedOpacity(
+                    opacity: _controlsVisible ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: IgnorePointer(
+                      ignoring: !_controlsVisible,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: strongText.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            if (state.isRunning)
+                              FilledButton.icon(
+                                onPressed: () {
+                                  notifier.pause();
+                                  _showControlsTemporarily();
+                                },
+                                icon: const Icon(Icons.pause),
+                                label: const Text('PAUSE'),
+                              )
+                            else
+                              FilledButton.icon(
+                                onPressed: state.hasStarted
+                                    ? () {
+                                        notifier.resume();
+                                        _showControlsTemporarily();
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.play_arrow),
+                                label: const Text('RESUME'),
+                              ),
+                            OutlinedButton.icon(
                               onPressed: state.hasStarted
                                   ? () {
-                                      notifier.resume();
+                                      notifier.skipPhase();
                                       _showControlsTemporarily();
                                     }
                                   : null,
-                              icon: const Icon(Icons.play_arrow),
-                              label: const Text('RESUME'),
+                              icon: const Icon(Icons.skip_next),
+                              label: const Text('SKIP'),
                             ),
-                          OutlinedButton.icon(
-                            onPressed: state.hasStarted
-                                ? () {
-                                    notifier.skipPhase();
-                                    _showControlsTemporarily();
-                                  }
-                                : null,
-                            icon: const Icon(Icons.skip_next),
-                            label: const Text('SKIP'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: state.hasStarted
-                                ? () async {
-                                    final navigator = Navigator.of(context);
-                                    await notifier.reset();
-                                    if (!mounted) return;
-                                    if (navigator.canPop()) {
-                                      navigator.pop();
+                            OutlinedButton.icon(
+                              onPressed: state.hasStarted
+                                  ? () async {
+                                      final navigator = Navigator.of(context);
+                                      await notifier.reset();
+                                      if (!mounted) return;
+                                      if (navigator.canPop()) {
+                                        navigator.pop();
+                                      }
                                     }
-                                  }
-                                : null,
-                            icon: const Icon(Icons.stop_circle_outlined),
-                            label: const Text('END'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              if (Navigator.of(context).canPop()) {
-                                Navigator.of(context).pop();
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.dashboard_customize_outlined,
+                                  : null,
+                              icon: const Icon(Icons.stop_circle_outlined),
+                              label: const Text('END'),
                             ),
-                            label: const Text('DETAILS'),
-                          ),
-                        ],
+                            OutlinedButton.icon(
+                              onPressed: closeAmbient,
+                              icon: const Icon(
+                                Icons.dashboard_customize_outlined,
+                              ),
+                              label: const Text('DETAILS'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -297,13 +347,12 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
 
 class _ClockPanel extends StatelessWidget {
   final String value;
+  final Color textColor;
 
-  const _ClockPanel({required this.value});
+  const _ClockPanel({required this.value, required this.textColor});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return SizedBox(
       width: 150,
       child: Text(
@@ -312,7 +361,7 @@ class _ClockPanel extends StatelessWidget {
         style: Theme.of(context).textTheme.displayLarge?.copyWith(
           fontWeight: FontWeight.w900,
           letterSpacing: 4,
-          color: colorScheme.onSurface.withValues(alpha: 0.92),
+          color: textColor,
         ),
       ),
     );

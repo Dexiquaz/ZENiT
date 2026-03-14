@@ -282,10 +282,20 @@ class _ZenQuickSheet extends ConsumerWidget {
   }
 
   Future<void> _openAmbientAfterSheetClose(BuildContext context) async {
-    final navigator = Navigator.of(context, rootNavigator: true);
-    navigator.pop();
-    await Future<void>.delayed(const Duration(milliseconds: 80));
-    await navigator.push(
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final sheetNavigator = Navigator.of(context);
+
+    if (sheetNavigator.canPop()) {
+      sheetNavigator.pop();
+    }
+
+    await Future<void>.delayed(Duration.zero);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!rootNavigator.mounted) {
+      return;
+    }
+
+    await rootNavigator.push(
       MaterialPageRoute<void>(
         builder: (_) => const ZenAmbientView(),
         settings: const RouteSettings(name: 'zen_ambient_focus'),
