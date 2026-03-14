@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/data_export_service.dart';
@@ -94,184 +95,193 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     final ref = this.ref;
     final settingsAsync = ref.watch(settingsProvider);
 
-    return Scaffold(
-      body: settingsAsync.when(
-        data: (settings) => ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            _buildSectionHeader(context, 'PREFERENCES'),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  _buildListTile(
-                    context,
-                    title: 'Currency Symbol',
-                    subtitle: 'Current: ${settings.currency}',
-                    icon: Icons.payments_outlined,
-                    onTap: () =>
-                        _showCurrencyPicker(context, ref, settings.currency),
-                  ),
-                ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        context.go('/');
+      },
+      child: Scaffold(
+        body: settingsAsync.when(
+          data: (settings) => ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              _buildSectionHeader(context, 'PREFERENCES'),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    _buildListTile(
+                      context,
+                      title: 'Currency Symbol',
+                      subtitle: 'Current: ${settings.currency}',
+                      icon: Icons.payments_outlined,
+                      onTap: () =>
+                          _showCurrencyPicker(context, ref, settings.currency),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            _buildSectionHeader(context, 'REMINDERS'),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile.adaptive(
-                    title: const Text('Daily Journal Prompt'),
-                    subtitle: const Text('Keep a nightly reflection cadence'),
-                    value: settings.journalPromptEnabled,
-                    onChanged: (value) {
-                      ref
-                          .read(settingsProvider.notifier)
-                          .setJournalPromptEnabled(value);
-                    },
-                  ),
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Notification Permission',
-                    subtitle: _checkingPermission
-                        ? 'Checking...'
-                        : _permissionLabel(_permissionStatus),
-                    icon: Icons.notifications_active_outlined,
-                    onTap: () async {
-                      if (_permissionStatus ==
-                              NotificationPermissionStatus.denied ||
-                          _permissionStatus ==
-                              NotificationPermissionStatus.unknown) {
-                        await _requestNotificationPermission(context);
-                      } else {
-                        await _refreshPermissionStatus();
-                      }
-                    },
-                  ),
-                  if (Platform.isAndroid) ...[
+              const SizedBox(height: 32),
+              _buildSectionHeader(context, 'REMINDERS'),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    SwitchListTile.adaptive(
+                      title: const Text('Daily Journal Prompt'),
+                      subtitle: const Text('Keep a nightly reflection cadence'),
+                      value: settings.journalPromptEnabled,
+                      onChanged: (value) {
+                        ref
+                            .read(settingsProvider.notifier)
+                            .setJournalPromptEnabled(value);
+                      },
+                    ),
                     dividerListTile,
                     _buildListTile(
                       context,
-                      title: 'Exact Alarm Permission',
-                      subtitle: _checkingExactAlarms
+                      title: 'Notification Permission',
+                      subtitle: _checkingPermission
                           ? 'Checking...'
-                          : _canScheduleExactAlarms
-                          ? 'Enabled (required for precise reminders)'
-                          : 'Tap to enable in Settings',
-                      icon: Icons.alarm_outlined,
+                          : _permissionLabel(_permissionStatus),
+                      icon: Icons.notifications_active_outlined,
                       onTap: () async {
-                        if (!_canScheduleExactAlarms) {
-                          await _requestExactAlarmPermission(context);
+                        if (_permissionStatus ==
+                                NotificationPermissionStatus.denied ||
+                            _permissionStatus ==
+                                NotificationPermissionStatus.unknown) {
+                          await _requestNotificationPermission(context);
                         } else {
-                          await _refreshExactAlarmStatus();
+                          await _refreshPermissionStatus();
                         }
                       },
                     ),
-                  ],
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Default Reminder Time',
-                    subtitle: _formatTimeForSettings(context, settings),
-                    icon: Icons.schedule_outlined,
-                    onTap: settings.journalPromptEnabled
-                        ? () => _pickJournalReminderTime(context, ref, settings)
-                        : null,
-                  ),
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Time Format',
-                    subtitle: _timeFormatLabel(settings.reminderTimeFormat),
-                    icon: Icons.access_time_filled_outlined,
-                    onTap: () => _showTimeFormatPicker(
+                    if (Platform.isAndroid) ...[
+                      dividerListTile,
+                      _buildListTile(
+                        context,
+                        title: 'Exact Alarm Permission',
+                        subtitle: _checkingExactAlarms
+                            ? 'Checking...'
+                            : _canScheduleExactAlarms
+                            ? 'Enabled (required for precise reminders)'
+                            : 'Tap to enable in Settings',
+                        icon: Icons.alarm_outlined,
+                        onTap: () async {
+                          if (!_canScheduleExactAlarms) {
+                            await _requestExactAlarmPermission(context);
+                          } else {
+                            await _refreshExactAlarmStatus();
+                          }
+                        },
+                      ),
+                    ],
+                    dividerListTile,
+                    _buildListTile(
                       context,
-                      ref,
-                      settings.reminderTimeFormat,
+                      title: 'Default Reminder Time',
+                      subtitle: _formatTimeForSettings(context, settings),
+                      icon: Icons.schedule_outlined,
+                      onTap: settings.journalPromptEnabled
+                          ? () =>
+                                _pickJournalReminderTime(context, ref, settings)
+                          : null,
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            _buildSectionHeader(context, 'DATA'),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  _buildListTile(
-                    context,
-                    title: 'Local-Only Storage',
-                    subtitle: 'Data stays on this device unless you export it.',
-                    icon: Icons.shield_outlined,
-                  ),
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Export Data (JSON)',
-                    subtitle: 'Save all your data to a JSON file.',
-                    icon: Icons.download_outlined,
-                    onTap: () => _exportDataJson(context, ref),
-                  ),
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Import Data',
-                    subtitle: 'Restore data from a JSON export file.',
-                    icon: Icons.upload_outlined,
-                    onTap: () => _importData(context, ref),
-                  ),
-                  dividerListTile,
-                  _buildListTile(
-                    context,
-                    title: 'Delete All Data',
-                    subtitle:
-                        'Permanently erase tasks, habits, notes, journal, and finance logs.',
-                    icon: Icons.delete_forever_outlined,
-                    onTap: () => _confirmDeleteAllData(context, ref),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            _buildSectionHeader(context, 'SYSTEM'),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  _buildListTile(
-                    context,
-                    title: 'Version',
-                    subtitle: 'v2.1.0 (ZENiT)',
-                    icon: Icons.info_outline,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 48),
-            Center(
-              child: Text(
-                'ZENiT // PRIVATE BY DEFAULT',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.3),
-                  letterSpacing: 2.0,
+                    dividerListTile,
+                    _buildListTile(
+                      context,
+                      title: 'Time Format',
+                      subtitle: _timeFormatLabel(settings.reminderTimeFormat),
+                      icon: Icons.access_time_filled_outlined,
+                      onTap: () => _showTimeFormatPicker(
+                        context,
+                        ref,
+                        settings.reminderTimeFormat,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-        loading: () => const ModuleLoadingState(
-          title: 'Loading settings',
-          subtitle: 'Preparing your preferences.',
-        ),
-        error: (_, __) => ModuleErrorState(
-          title: 'Could not load settings',
-          subtitle: 'Please try refreshing settings.',
-          onRetry: () => ref.invalidate(settingsProvider),
+              const SizedBox(height: 32),
+              _buildSectionHeader(context, 'DATA'),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    _buildListTile(
+                      context,
+                      title: 'Local-Only Storage',
+                      subtitle:
+                          'Data stays on this device unless you export it.',
+                      icon: Icons.shield_outlined,
+                    ),
+                    dividerListTile,
+                    _buildListTile(
+                      context,
+                      title: 'Export Data (JSON)',
+                      subtitle: 'Save all your data to a JSON file.',
+                      icon: Icons.download_outlined,
+                      onTap: () => _exportDataJson(context, ref),
+                    ),
+                    dividerListTile,
+                    _buildListTile(
+                      context,
+                      title: 'Import Data',
+                      subtitle: 'Restore data from a JSON export file.',
+                      icon: Icons.upload_outlined,
+                      onTap: () => _importData(context, ref),
+                    ),
+                    dividerListTile,
+                    _buildListTile(
+                      context,
+                      title: 'Delete All Data',
+                      subtitle:
+                          'Permanently erase tasks, habits, notes, journal, and finance logs.',
+                      icon: Icons.delete_forever_outlined,
+                      onTap: () => _confirmDeleteAllData(context, ref),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              _buildSectionHeader(context, 'SYSTEM'),
+              const SizedBox(height: 16),
+              Card(
+                child: Column(
+                  children: [
+                    _buildListTile(
+                      context,
+                      title: 'Version',
+                      subtitle: 'v1.3.2 (ZENiT)',
+                      icon: Icons.info_outline,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 48),
+              Center(
+                child: Text(
+                  'ZENiT // PRIVATE BY DEFAULT',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    letterSpacing: 2.0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          loading: () => const ModuleLoadingState(
+            title: 'Loading settings',
+            subtitle: 'Preparing your preferences.',
+          ),
+          error: (_, __) => ModuleErrorState(
+            title: 'Could not load settings',
+            subtitle: 'Please try refreshing settings.',
+            onRetry: () => ref.invalidate(settingsProvider),
+          ),
         ),
       ),
     );
