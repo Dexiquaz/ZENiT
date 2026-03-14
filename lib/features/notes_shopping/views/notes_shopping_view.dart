@@ -59,22 +59,25 @@ class _NotesTab extends ConsumerWidget {
     final notes = ref.watch(noteListProvider);
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showNoteEditor(context, ref),
-        label: const Text('NEW NOTE'),
-        icon: const Icon(Icons.add),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: SizedBox(
+        width: MediaQuery.sizeOf(context).width - 32,
+        child: FloatingActionButton.extended(
+          onPressed: () => _showNoteEditor(context, ref),
+          label: const Text('NEW NOTE'),
+          icon: const Icon(Icons.add),
+        ),
       ),
       body: notes.when(
         data: (list) => list.isEmpty
             ? ModuleEmptyState(
                 icon: Icons.note_alt_outlined,
                 title: 'No notes yet',
-                subtitle: 'Capture your first thought, idea, or reminder.',
-                actionLabel: 'NEW NOTE',
-                onAction: () => _showNoteEditor(context, ref),
+                subtitle:
+                    'Capture your first thought, idea, or reminder using NEW NOTE.',
               )
             : GridView.builder(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 110),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: MediaQuery.sizeOf(context).width > 900
                       ? 4
@@ -266,81 +269,115 @@ class _ShoppingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(shoppingListProvider);
-    final addController = TextEditingController();
-
-    return Column(
-      children: [
-        Expanded(
-          child: items.when(
-            data: (list) {
-              if (list.isEmpty) {
-                return const ModuleEmptyState(
-                  icon: Icons.shopping_cart_outlined,
-                  title: 'Shopping list is empty',
-                  subtitle: 'Add items below to build your list.',
-                );
-              }
-              final unchecked = list.where((i) => !i.checked).toList();
-              final checked = list.where((i) => i.checked).toList();
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  ...unchecked.map((i) => _ShoppingTile(item: i)),
-                  if (checked.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.only(top: 24, bottom: 8, left: 8),
-                      child: Text('COMPLETED'),
-                    ),
-                    ...checked.map((i) => _ShoppingTile(item: i)),
-                  ],
-                ],
-              );
-            },
-            loading: () => const ModuleLoadingState(
-              title: 'Loading shopping list',
-              subtitle: 'Preparing your current items.',
-            ),
-            error: (_, __) => ModuleErrorState(
-              title: 'Could not load shopping list',
-              subtitle: 'Please try refreshing the list.',
-              onRetry: () => ref.invalidate(shoppingListProvider),
-            ),
-          ),
+    return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: SizedBox(
+        width: MediaQuery.sizeOf(context).width - 32,
+        child: FloatingActionButton.extended(
+          onPressed: () => _showAddItemEditor(context, ref),
+          icon: const Icon(Icons.add_shopping_cart_outlined),
+          label: const Text('NEW ITEM'),
         ),
-        Card(
-          margin: const EdgeInsets.all(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TextField(
-              controller: addController,
-              decoration: InputDecoration(
-                hintText: 'ADD ITEM',
-                border: InputBorder.none,
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
-                    if (addController.text.isNotEmpty) {
-                      ref
-                          .read(shoppingListProvider.notifier)
-                          .addItem(ShoppingItem(name: addController.text));
-                      addController.clear();
-                    }
-                  },
+      ),
+      body: items.when(
+        data: (list) {
+          if (list.isEmpty) {
+            return const ModuleEmptyState(
+              icon: Icons.shopping_cart_outlined,
+              title: 'Shopping list is empty',
+              subtitle: 'Add items using NEW ITEM.',
+            );
+          }
+          final unchecked = list.where((i) => !i.checked).toList();
+          final checked = list.where((i) => i.checked).toList();
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            children: [
+              ...unchecked.map((i) => _ShoppingTile(item: i)),
+              if (checked.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.only(top: 24, bottom: 8, left: 8),
+                  child: Text('COMPLETED'),
                 ),
-              ),
-              onSubmitted: (v) {
-                if (v.isNotEmpty) {
-                  ref
-                      .read(shoppingListProvider.notifier)
-                      .addItem(ShoppingItem(name: v));
-                  addController.clear();
-                }
-              },
-            ),
-          ),
+                ...checked.map((i) => _ShoppingTile(item: i)),
+              ],
+            ],
+          );
+        },
+        loading: () => const ModuleLoadingState(
+          title: 'Loading shopping list',
+          subtitle: 'Preparing your current items.',
         ),
-      ],
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load shopping list',
+          subtitle: 'Please try refreshing the list.',
+          onRetry: () => ref.invalidate(shoppingListProvider),
+        ),
+      ),
     );
+  }
+
+  void _showAddItemEditor(BuildContext context, WidgetRef ref) {
+    final nameController = TextEditingController();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('NEW ITEM', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'ITEM NAME',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _submitNewItem(ctx, ref, nameController),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('CANCEL'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () => _submitNewItem(ctx, ref, nameController),
+                  child: const Text('ADD'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submitNewItem(
+    BuildContext sheetContext,
+    WidgetRef ref,
+    TextEditingController controller,
+  ) {
+    final name = controller.text.trim();
+    if (name.isEmpty) return;
+
+    ref.read(shoppingListProvider.notifier).addItem(ShoppingItem(name: name));
+    Navigator.pop(sheetContext);
   }
 }
 
