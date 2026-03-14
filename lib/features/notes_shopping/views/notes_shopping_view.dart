@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../models/models.dart';
 import '../providers/notes_provider.dart';
 
@@ -65,13 +66,12 @@ class _NotesTab extends ConsumerWidget {
       ),
       body: notes.when(
         data: (list) => list.isEmpty
-            ? Center(
-                child: Text(
-                  'NO NOTES FOUND',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
-                ),
+            ? ModuleEmptyState(
+                icon: Icons.note_alt_outlined,
+                title: 'No notes yet',
+                subtitle: 'Capture your first thought, idea, or reminder.',
+                actionLabel: 'NEW NOTE',
+                onAction: () => _showNoteEditor(context, ref),
               )
             : GridView.builder(
                 padding: const EdgeInsets.all(24),
@@ -91,8 +91,15 @@ class _NotesTab extends ConsumerWidget {
                   onTap: () => _showNoteEditor(context, ref, note: list[i]),
                 ),
               ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('ERROR // $e')),
+        loading: () => const ModuleLoadingState(
+          title: 'Loading notes',
+          subtitle: 'Fetching your notes collection.',
+        ),
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load notes',
+          subtitle: 'Please try refreshing notes.',
+          onRetry: () => ref.invalidate(noteListProvider),
+        ),
       ),
     );
   }
@@ -267,13 +274,10 @@ class _ShoppingTab extends ConsumerWidget {
           child: items.when(
             data: (list) {
               if (list.isEmpty) {
-                return Center(
-                  child: Text(
-                    'SHOPPING LIST EMPTY',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                  ),
+                return const ModuleEmptyState(
+                  icon: Icons.shopping_cart_outlined,
+                  title: 'Shopping list is empty',
+                  subtitle: 'Add items below to build your list.',
                 );
               }
               final unchecked = list.where((i) => !i.checked).toList();
@@ -292,8 +296,15 @@ class _ShoppingTab extends ConsumerWidget {
                 ],
               );
             },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('ERROR // $e')),
+            loading: () => const ModuleLoadingState(
+              title: 'Loading shopping list',
+              subtitle: 'Preparing your current items.',
+            ),
+            error: (_, __) => ModuleErrorState(
+              title: 'Could not load shopping list',
+              subtitle: 'Please try refreshing the list.',
+              onRetry: () => ref.invalidate(shoppingListProvider),
+            ),
           ),
         ),
         Card(

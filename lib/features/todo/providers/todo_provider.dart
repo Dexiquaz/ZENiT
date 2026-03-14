@@ -34,6 +34,8 @@ class ProjectNotifier extends AsyncNotifier<List<Project>> {
       await _notifications.cancelTaskReminder(taskId);
     }
 
+    await _db.unlinkFocusSessionsForTasks(taskIds);
+
     await _db.deleteProject(id);
     // If the deleted project was selected, reset selection to null (All)
     if (ref.read(selectedProjectProvider) == id) {
@@ -49,6 +51,12 @@ final taskListProvider = AsyncNotifierProvider<TaskNotifier, List<Task>>(
   TaskNotifier.new,
 );
 
+final allTaskListProvider = FutureProvider<List<Task>>((ref) async {
+  // Re-evaluate whenever the filtered task provider changes.
+  ref.watch(taskListProvider);
+  return DatabaseHelper().getTasks();
+});
+
 class TaskNotifier extends AsyncNotifier<List<Task>> {
   final _db = DatabaseHelper();
   final _notifications = NotificationService.instance;
@@ -57,6 +65,13 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
   Future<List<Task>> build() async {
     final projectId = ref.watch(selectedProjectProvider);
     return _db.getTasks(projectId: projectId);
+  }
+
+  Future<void> resyncTaskReminders() async {
+    final tasks = await _db.getTasks();
+    for (final task in tasks) {
+      await _syncTaskReminder(task);
+    }
   }
 
   Future<void> addTask(Task task) async {
@@ -112,6 +127,7 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
 
   Future<void> deleteTask(int id) async {
     await _notifications.cancelTaskReminder(id);
+    await _db.unlinkFocusSessionsForTask(id);
     await _db.deleteTask(id);
     ref.invalidateSelf();
     ref.invalidate(projectListProvider);

@@ -13,6 +13,7 @@ class UserSettings {
   final ReminderTimeFormat reminderTimeFormat;
   final int focusDurationMinutes;
   final int breakDurationMinutes;
+  final bool silentFocusNotifications;
 
   UserSettings({
     this.currency = r'$',
@@ -22,6 +23,7 @@ class UserSettings {
     this.reminderTimeFormat = ReminderTimeFormat.system,
     this.focusDurationMinutes = 25,
     this.breakDurationMinutes = 5,
+    this.silentFocusNotifications = true,
   });
 
   TimeOfDay get journalReminderTime =>
@@ -35,6 +37,7 @@ class UserSettings {
     ReminderTimeFormat? reminderTimeFormat,
     int? focusDurationMinutes,
     int? breakDurationMinutes,
+    bool? silentFocusNotifications,
   }) {
     return UserSettings(
       currency: currency ?? this.currency,
@@ -45,6 +48,8 @@ class UserSettings {
       reminderTimeFormat: reminderTimeFormat ?? this.reminderTimeFormat,
       focusDurationMinutes: focusDurationMinutes ?? this.focusDurationMinutes,
       breakDurationMinutes: breakDurationMinutes ?? this.breakDurationMinutes,
+      silentFocusNotifications:
+          silentFocusNotifications ?? this.silentFocusNotifications,
     );
   }
 
@@ -57,6 +62,7 @@ class UserSettings {
       'reminderTimeFormat': reminderTimeFormat.name,
       'focusDurationMinutes': focusDurationMinutes,
       'breakDurationMinutes': breakDurationMinutes,
+      'silentFocusNotifications': silentFocusNotifications,
     };
   }
 
@@ -70,6 +76,8 @@ class UserSettings {
 
     final focus = (map['focusDurationMinutes'] as num?)?.toInt() ?? 25;
     final rest = (map['breakDurationMinutes'] as num?)?.toInt() ?? 5;
+    final silentFocusNotifications =
+        (map['silentFocusNotifications'] as bool?) ?? true;
 
     return UserSettings(
       currency: (map['currency'] as String?) ?? r'$',
@@ -80,6 +88,7 @@ class UserSettings {
       reminderTimeFormat: reminderTimeFormat,
       focusDurationMinutes: focus.clamp(1, 60).toInt(),
       breakDurationMinutes: rest.clamp(1, 30).toInt(),
+      silentFocusNotifications: silentFocusNotifications,
     );
   }
 }
@@ -96,6 +105,8 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   static const _reminderTimeFormatKey = 'setting_reminder_time_format';
   static const _focusDurationMinutesKey = 'setting_focus_duration_minutes';
   static const _breakDurationMinutesKey = 'setting_break_duration_minutes';
+  static const _silentFocusNotificationsKey =
+      'setting_silent_focus_notifications';
 
   final _notifications = NotificationService.instance;
 
@@ -112,6 +123,8 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
     );
     final focusDurationMinutes = prefs.getInt(_focusDurationMinutesKey) ?? 25;
     final breakDurationMinutes = prefs.getInt(_breakDurationMinutesKey) ?? 5;
+    final silentFocusNotifications =
+        prefs.getBool(_silentFocusNotificationsKey) ?? true;
 
     final settings = UserSettings(
       currency: currency,
@@ -121,6 +134,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
       reminderTimeFormat: reminderTimeFormat,
       focusDurationMinutes: focusDurationMinutes,
       breakDurationMinutes: breakDurationMinutes,
+      silentFocusNotifications: silentFocusNotifications,
     );
     await _syncJournalPrompt(settings);
 
@@ -188,6 +202,20 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
     state = AsyncData(updated);
   }
 
+  Future<void> setSilentFocusNotifications(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_silentFocusNotificationsKey, enabled);
+
+    final current = state.hasValue ? state.value! : UserSettings();
+    final updated = current.copyWith(silentFocusNotifications: enabled);
+    state = AsyncData(updated);
+  }
+
+  Future<void> resyncJournalPrompt() async {
+    final current = state.hasValue ? state.value! : await future;
+    await _syncJournalPrompt(current);
+  }
+
   Future<void> resetToDefaults() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_currencyKey);
@@ -197,6 +225,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
     await prefs.remove(_reminderTimeFormatKey);
     await prefs.remove(_focusDurationMinutesKey);
     await prefs.remove(_breakDurationMinutesKey);
+    await prefs.remove(_silentFocusNotificationsKey);
 
     final defaults = UserSettings();
     state = AsyncData(defaults);
@@ -228,6 +257,10 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
     );
     await prefs.setInt(_focusDurationMinutesKey, restored.focusDurationMinutes);
     await prefs.setInt(_breakDurationMinutesKey, restored.breakDurationMinutes);
+    await prefs.setBool(
+      _silentFocusNotificationsKey,
+      restored.silentFocusNotifications,
+    );
 
     state = AsyncData(restored);
     await _syncJournalPrompt(restored);

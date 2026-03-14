@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
 
@@ -128,16 +129,10 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
             journalState.when(
               data: (entries) {
                 if (entries.isEmpty) {
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Text(
-                          'NO ENTRIES FOR THIS DAY',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ),
-                    ),
+                  return const ModuleEmptyState(
+                    icon: Icons.menu_book_outlined,
+                    title: 'No entries for this day',
+                    subtitle: 'Tap NEW ENTRY to log your day.',
                   );
                 }
                 return Column(
@@ -146,8 +141,15 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
                       .toList(),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('ERROR // $e')),
+              loading: () => const ModuleLoadingState(
+                title: 'Loading journal entries',
+                subtitle: 'Checking entries for the selected day.',
+              ),
+              error: (_, __) => ModuleErrorState(
+                title: 'Could not load journal entries',
+                subtitle: 'Please try selecting the day again.',
+                onRetry: () => ref.invalidate(journalProvider),
+              ),
             ),
           ],
         ),

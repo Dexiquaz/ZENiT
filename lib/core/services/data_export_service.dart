@@ -7,6 +7,7 @@ import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
 import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
+import '../../features/zen_mode/models/focus_session.dart';
 
 class DataImportResult {
   final bool success;
@@ -45,10 +46,11 @@ class DataExportService {
       final notes = await _db.getNotes();
       final shoppingItems = await _db.getShoppingItems();
       final journalEntries = await _db.getAllJournalEntries();
+      final focusSessions = await _db.getFocusSessions();
 
       // Create export object
       final exportData = {
-        'version': '1.1',
+        'version': '1.2',
         'exportedAt': DateTime.now().toIso8601String(),
         'settings': settings ?? <String, dynamic>{},
         'data': {
@@ -61,6 +63,9 @@ class DataExportService {
           'notes': notes.map((n) => n.toMap()).toList(),
           'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(),
           'journalEntries': journalEntries.map((j) => j.toMap()).toList(),
+          'focusSessions': focusSessions
+              .map((session) => session.toMap())
+              .toList(),
         },
       };
 
@@ -172,6 +177,43 @@ class DataExportService {
                 t.pinned ? '1' : '0',
                 t.completed ? '1' : '0',
                 t.createdAt.toIso8601String(),
+              ],
+            )
+            .toList(),
+      );
+
+      final focusSessions = await _db.getFocusSessions();
+      await _writeCsvFile(
+        '${exportDir.path}/focus_sessions.csv',
+        [
+          'id',
+          'task_id',
+          'task_title_snapshot',
+          'status',
+          'phase',
+          'focus_duration_seconds',
+          'break_duration_seconds',
+          'remaining_seconds',
+          'completed_focus_sessions',
+          'started_at',
+          'updated_at',
+          'completed_at',
+        ],
+        focusSessions
+            .map(
+              (session) => [
+                session.id?.toString() ?? '',
+                session.taskId?.toString() ?? '',
+                _escapeCsv(session.taskTitleSnapshot ?? ''),
+                session.status.name,
+                session.phase.name,
+                session.focusDuration.inSeconds.toString(),
+                session.breakDuration.inSeconds.toString(),
+                session.remaining.inSeconds.toString(),
+                session.completedFocusSessions.toString(),
+                session.startedAt.toIso8601String(),
+                session.updatedAt.toIso8601String(),
+                session.completedAt?.toIso8601String() ?? '',
               ],
             )
             .toList(),
@@ -305,7 +347,7 @@ class DataExportService {
 
       // Validate version
       final version = data['version']?.toString();
-      if (version != '1.0' && version != '1.1') {
+      if (version != '1.0' && version != '1.1' && version != '1.2') {
         debugPrint('Unsupported export version: ${data['version']}');
         return DataImportResult(
           success: false,
@@ -360,19 +402,24 @@ class DataExportService {
 
       // Import tasks
       final tasksData = importData['tasks'] as List<dynamic>? ?? [];
+      final taskIdMap = <int, int>{};
       for (final t in tasksData) {
         if (t is! Map<String, dynamic>) continue;
         final task = Task.fromMap(t);
+        final oldTaskId = task.id;
         // Remap project ID
         final newProjectId = task.projectId != null
             ? projectIdMap[task.projectId]
             : null;
-        await _db.insertTask(
+        final newTaskId = await _db.insertTask(
           task.copyWith(
             id: null, // Clear ID for insert
             projectId: newProjectId,
           ),
         );
+        if (oldTaskId != null) {
+          taskIdMap[oldTaskId] = newTaskId;
+        }
       }
 
       // Import transactions
@@ -414,6 +461,34 @@ class DataExportService {
         if (j is! Map<String, dynamic>) continue;
         final entry = JournalEntry.fromMap(j);
         await _db.insertJournalEntry(entry.copyWith(id: null));
+      }
+
+      final focusSessionsData =
+          importData['focusSessions'] as List<dynamic>? ?? [];
+      for (final sessionMap in focusSessionsData) {
+        if (sessionMap is! Map<String, dynamic>) continue;
+        final focusSession = FocusSession.fromMap(sessionMap);
+        final remappedTaskId = focusSession.taskId != null
+            ? taskIdMap[focusSession.taskId!]
+            : null;
+        final normalizedStatus = focusSession.isActive
+            ? (focusSession.completedFocusSessions > 0
+                  ? FocusSessionStatus.completed
+                  : FocusSessionStatus.cancelled)
+            : focusSession.status;
+        final normalizedCompletedAt = focusSession.isActive
+            ? DateTime.now()
+            : focusSession.completedAt;
+
+        await _db.insertFocusSession(
+          focusSession.copyWith(
+            id: null,
+            taskId: remappedTaskId,
+            status: normalizedStatus,
+            updatedAt: normalizedCompletedAt ?? focusSession.updatedAt,
+            completedAt: normalizedCompletedAt,
+          ),
+        );
       }
 
       return DataImportResult(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../providers/habit_provider.dart';
 import '../widgets/add_habit_dialog.dart';
 import '../widgets/edit_habit_sheet.dart';
@@ -47,11 +48,19 @@ class HabitTrackerView extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               if (habits.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(48),
-                    child: Center(child: Text('NO HABITS TRACKED YET')),
-                  ),
+                ModuleEmptyState(
+                  icon: Icons.track_changes_outlined,
+                  title: 'No habits tracked yet',
+                  subtitle: 'Create your first habit and start a streak.',
+                  actionLabel: 'NEW HABIT',
+                  onAction: () {
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      builder: (context) => const AddHabitDialog(),
+                    );
+                  },
                 )
               else
                 ListView.separated(
@@ -65,8 +74,15 @@ class HabitTrackerView extends ConsumerWidget {
             ],
           ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('ERROR // $e')),
+        loading: () => const ModuleLoadingState(
+          title: 'Loading habits',
+          subtitle: 'Building your habit board.',
+        ),
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load habits',
+          subtitle: 'Please try refreshing your habits.',
+          onRetry: () => ref.invalidate(habitListProvider),
+        ),
       ),
     );
   }

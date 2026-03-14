@@ -11,6 +11,7 @@ import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
 import '../../zen_mode/providers/zen_mode_provider.dart';
 import '../../zen_mode/widgets/zen_quick_sheet.dart';
+import '../../../core/theme/app_colors.dart';
 
 class DashboardView extends ConsumerWidget {
   const DashboardView({super.key});
@@ -68,9 +69,13 @@ class DashboardView extends ConsumerWidget {
               icon: zenState.isRunning ? Icons.timer : Icons.timer_outlined,
               onTap: () => showZenQuickSheet(context),
               summaryValue: zenState.timeLabel,
-              summarySubtitle: zenState.phaseLabel,
+              summarySubtitle: zenState.hasLinkedTask
+                  ? '${zenState.phaseLabel} • linked'
+                  : zenState.phaseLabel,
               details: Text(
-                zenState.isRunning
+                zenState.hasLinkedTask
+                    ? '${zenState.linkedTaskTitle} • ${zenState.completedFocusSessions} cycles completed'
+                    : zenState.isRunning
                     ? 'Focus engine active. Tap to control session flow.'
                     : zenState.isIdle
                     ? 'Start a 25-minute focus sprint.'
@@ -126,7 +131,7 @@ class DashboardView extends ConsumerWidget {
               summaryValue: '$completedTodayCount / ${habits.length}',
               summarySubtitle: 'today',
               details: habits.isEmpty
-                  ? const Text('No habits yet. Add your first protocol.')
+                  ? const Text('No habits yet. add your first habit')
                   : hasPending
                   ? Text(
                       'Pending: ${pending.take(2).map((h) => h.title).join(', ')}${pending.length > 2 ? '...' : ''}',
@@ -139,12 +144,16 @@ class DashboardView extends ConsumerWidget {
             icon: Icons.sync,
             navigationPath: '/habits',
             summaryValue: '...',
+            summarySubtitle: 'loading',
+            details: const Text('Loading habit activity...'),
           ),
           error: (_, __) => _ModuleButton(
             title: 'HABITS',
             icon: Icons.error_outline,
             navigationPath: '/habits',
             summaryValue: 'ERR',
+            summarySubtitle: 'issue',
+            details: const Text('Could not load habits. Tap to open module.'),
           ),
         ),
         const SizedBox(height: 16),
@@ -161,7 +170,7 @@ class DashboardView extends ConsumerWidget {
                   ? 'pending'
                   : 'pending • top ${pinned.length}',
               details: pending.isEmpty
-                  ? const Text('All task sequences resolved.')
+                  ? const Text('All tasks completed.')
                   : pinned.isNotEmpty
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -185,7 +194,7 @@ class DashboardView extends ConsumerWidget {
                                 const Icon(
                                   Icons.circle,
                                   size: 4,
-                                  color: Colors.grey,
+                                  color: AppColors.textSecondary,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -207,12 +216,16 @@ class DashboardView extends ConsumerWidget {
             icon: Icons.sync,
             navigationPath: '/tasks',
             summaryValue: '...',
+            summarySubtitle: 'loading',
+            details: const Text('Loading task queue...'),
           ),
           error: (_, __) => _ModuleButton(
             title: 'TASKS',
             icon: Icons.error_outline,
             navigationPath: '/tasks',
             summaryValue: 'ERR',
+            summarySubtitle: 'issue',
+            details: const Text('Could not load tasks. Tap to open module.'),
           ),
         ),
         const SizedBox(height: 16),
@@ -238,12 +251,16 @@ class DashboardView extends ConsumerWidget {
             icon: Icons.sync,
             navigationPath: '/calendar',
             summaryValue: '...',
+            summarySubtitle: 'loading',
+            details: const Text('Loading journal entries...'),
           ),
           error: (_, __) => _ModuleButton(
             title: 'CALENDAR',
             icon: Icons.error_outline,
             navigationPath: '/calendar',
             summaryValue: 'ERR',
+            summarySubtitle: 'issue',
+            details: const Text('Could not load calendar. Tap to open module.'),
           ),
         ),
         const SizedBox(height: 16),
@@ -281,12 +298,18 @@ class DashboardView extends ConsumerWidget {
             icon: Icons.sync,
             navigationPath: '/finance',
             summaryValue: '...',
+            summarySubtitle: 'loading',
+            details: const Text('Loading finance snapshot...'),
           ),
           error: (_, __) => _ModuleButton(
             title: 'FINANCE',
             icon: Icons.error_outline,
             navigationPath: '/finance',
             summaryValue: 'ERR',
+            summarySubtitle: 'issue',
+            details: const Text(
+              'Could not load finance data. Tap to open module.',
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -312,12 +335,16 @@ class DashboardView extends ConsumerWidget {
             icon: Icons.sync,
             navigationPath: '/notes',
             summaryValue: '...',
+            summarySubtitle: 'loading',
+            details: const Text('Loading notes archive...'),
           ),
           error: (_, __) => _ModuleButton(
             title: 'NOTES',
             icon: Icons.error_outline,
             navigationPath: '/notes',
             summaryValue: 'ERR',
+            summarySubtitle: 'issue',
+            details: const Text('Could not load notes. Tap to open module.'),
           ),
         ),
       ],

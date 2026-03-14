@@ -8,8 +8,8 @@ class AppColors {
 
   // Neutral Grays according to contrast
   static const Color textPrimary = Color(0xFFF1F1F3);
-  static const Color textSecondary = Color(0xFFA1A1AA);
-  static const Color textDim = Color(0xFF52525B);
+  static const Color textSecondary = Color(0xFFBFC0CA);
+  static const Color textDim = Color(0xFF8A8B96);
 
   // Sophisticated Accents
   static const Color primary = Color(0xFF818CF8); // Soft Indigo

@@ -27,11 +27,22 @@ class NotificationService {
   static const String _journalChannelName = 'Journal prompts';
   static const String _journalChannelDescription =
       'Daily reflection prompts for ZENiT journal';
+  static const String _billChannelId = 'zenit_bill_reminders_v1';
+  static const String _billChannelName = 'Bill reminders';
+  static const String _billChannelDescription =
+      'Due date reminders for bills in ZENiT';
+  static const String _focusChannelId = 'zenit_focus_transitions_v1';
+  static const String _focusChannelName = 'Focus transitions';
+  static const String _focusChannelDescription =
+      'Alerts when focus sessions switch between focus and break phases';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  bool _focusModeSuppressed = false;
+
+  bool get isFocusModeSuppressed => _focusModeSuppressed;
 
   Future<void> initialize() async {
     if (!_supportsNotifications()) return;
@@ -59,6 +70,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
     if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
@@ -120,12 +132,126 @@ class NotificationService {
     await _plugin.cancel(_taskNotificationId(taskId));
   }
 
+  Future<void> scheduleBillReminder({
+    required int billId,
+    required String billTitle,
+    required DateTime reminderAt,
+  }) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+    if (_focusModeSuppressed) return;
+
+    final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
+    if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
+      return;
+    }
+
+    try {
+      await _plugin.zonedSchedule(
+        _billNotificationId(billId),
+        'Bill reminder',
+        billTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _billChannelId,
+            _billChannelName,
+            channelDescription: _billChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'bill:$billId',
+        matchDateTimeComponents: null,
+      );
+    } catch (e) {
+      debugPrint('Error scheduling bill reminder: $e');
+      await _plugin.zonedSchedule(
+        _billNotificationId(billId),
+        'Bill reminder',
+        billTitle,
+        scheduledDate,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _billChannelId,
+            _billChannelName,
+            channelDescription: _billChannelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'bill:$billId',
+        matchDateTimeComponents: null,
+      );
+    }
+  }
+
+  Future<void> cancelBillReminder(int billId) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+    await _plugin.cancel(_billNotificationId(billId));
+  }
+
   Future<void> cancelAll() async {
     if (!_supportsNotifications()) return;
     if (!_initialized) {
       await initialize();
     }
     await _plugin.cancelAll();
+  }
+
+  Future<void> showFocusPhaseTransitionAlert({
+    required bool toBreak,
+    required Duration nextDuration,
+    String? taskTitle,
+  }) async {
+    if (!_supportsNotifications()) return;
+    if (!_initialized) {
+      await initialize();
+    }
+    if (_focusModeSuppressed) return;
+
+    final minutes = nextDuration.inMinutes.clamp(1, 9999);
+    final minutesLabel = minutes == 1 ? '1 minute' : '$minutes minutes';
+    final linkedTaskSuffix = (taskTitle != null && taskTitle.trim().isNotEmpty)
+        ? ' • ${taskTitle.trim()}'
+        : '';
+
+    final title = toBreak
+        ? 'Focus complete. Break starts now.'
+        : 'Break complete. Back to focus.';
+    final body = toBreak
+        ? 'Take a $minutesLabel break$linkedTaskSuffix.'
+        : 'Start a $minutesLabel focus block$linkedTaskSuffix.';
+
+    await _plugin.show(
+      _focusTransitionNotificationId,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _focusChannelId,
+          _focusChannelName,
+          channelDescription: _focusChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          category: AndroidNotificationCategory.alarm,
+        ),
+      ),
+      payload: 'focus:transition',
+    );
   }
 
   Future<void> scheduleHabitReminder({
@@ -140,6 +266,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final now = tz.TZDateTime.now(tz.local);
     late final tz.TZDateTime firstRun;
@@ -195,6 +322,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final now = tz.TZDateTime.now(tz.local);
     final firstRun = _nextDailyTrigger(now, reminderTime);
@@ -272,6 +400,26 @@ class NotificationService {
     return getPermissionStatus();
   }
 
+  Future<void> setFocusModeSuppressed(bool suppressed) async {
+    if (!_supportsNotifications()) {
+      _focusModeSuppressed = suppressed;
+      return;
+    }
+    if (!_initialized) {
+      await initialize();
+    }
+    if (_focusModeSuppressed == suppressed) {
+      return;
+    }
+
+    _focusModeSuppressed = suppressed;
+
+    if (suppressed) {
+      await _plugin.cancel(_focusTransitionNotificationId);
+      await _plugin.cancelAll();
+    }
+  }
+
   /// Check if the app can schedule exact alarms (Android 12+)
   Future<bool> canScheduleExactAlarms() async {
     if (defaultTargetPlatform != TargetPlatform.android) {
@@ -320,6 +468,8 @@ class NotificationService {
   int _taskNotificationId(int taskId) => 100000 + taskId;
   int _habitNotificationId(int habitId) => 200000 + habitId;
   static const int _journalNotificationId = 300000;
+  static const int _focusTransitionNotificationId = 400000;
+  int _billNotificationId(int billId) => 500000 + billId;
 
   bool _supportsNotifications() {
     return defaultTargetPlatform == TargetPlatform.android ||
@@ -376,9 +526,31 @@ class NotificationService {
       enableVibration: true,
     );
 
+    // Create bill reminders channel
+    const billChannel = AndroidNotificationChannel(
+      _billChannelId,
+      _billChannelName,
+      description: _billChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    // Create focus transition channel
+    const focusChannel = AndroidNotificationChannel(
+      _focusChannelId,
+      _focusChannelName,
+      description: _focusChannelDescription,
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+
     await androidPlugin.createNotificationChannel(taskChannel);
     await androidPlugin.createNotificationChannel(habitChannel);
     await androidPlugin.createNotificationChannel(journalChannel);
+    await androidPlugin.createNotificationChannel(billChannel);
+    await androidPlugin.createNotificationChannel(focusChannel);
   }
 
   Future<void> _requestPermissions() async {
