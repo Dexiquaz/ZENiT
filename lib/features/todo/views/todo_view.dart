@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/utils/ui_helpers.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../../zen_mode/providers/focus_stats_provider.dart';
 import '../models/task_model.dart';
 import '../providers/todo_provider.dart';
@@ -88,8 +89,20 @@ class TodoView extends ConsumerWidget {
                   ),
                 ],
               ),
-              loading: () => const SizedBox(),
-              error: (_, __) => const SizedBox(),
+              loading: () => const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+              error: (_, __) => Center(
+                child: TextButton.icon(
+                  onPressed: () => ref.invalidate(projectListProvider),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Retry categories'),
+                ),
+              ),
             ),
           ),
           // Task list
@@ -97,13 +110,16 @@ class TodoView extends ConsumerWidget {
             child: tasksData.when(
               data: (list) {
                 if (list.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'NO TASKS IN THIS PROJECT',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    ),
+                  return ModuleEmptyState(
+                    icon: Icons.task_alt_outlined,
+                    title: selectedProject == null
+                        ? 'No tasks yet'
+                        : 'No tasks in this category',
+                    subtitle: selectedProject == null
+                        ? 'Add your first task to start planning your day.'
+                        : 'Add a task here or switch back to ALL.',
+                    actionLabel: 'ADD TASK',
+                    onAction: () => _showTaskEditor(context, ref),
                   );
                 }
 
@@ -225,8 +241,15 @@ class TodoView extends ConsumerWidget {
                   ],
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('ERROR // $e')),
+              loading: () => const ModuleLoadingState(
+                title: 'Loading tasks',
+                subtitle: 'Preparing your task list.',
+              ),
+              error: (_, __) => ModuleErrorState(
+                title: 'Could not load tasks',
+                subtitle: 'Please try refreshing the task list.',
+                onRetry: () => ref.invalidate(taskListProvider),
+              ),
             ),
           ),
         ],
@@ -396,23 +419,11 @@ class _TaskTile extends ConsumerWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
-                        loading: () => Text(
-                          'Loading focus stats...',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
+                        loading: () => const ModuleInlineLoadingState(
+                          label: 'Loading focus stats',
                         ),
-                        error: (_, __) => Text(
-                          'Focus stats unavailable',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
+                        error: (_, __) => const ModuleInlineErrorState(
+                          label: 'Focus stats unavailable',
                         ),
                       ),
                     ],

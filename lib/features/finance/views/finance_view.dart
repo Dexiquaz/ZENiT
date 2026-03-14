@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../models/bill_model.dart';
 import '../models/transaction_model.dart';
 import '../providers/finance_provider.dart';
@@ -46,11 +47,25 @@ class FinanceView extends ConsumerWidget {
               ],
             ),
           ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('ERROR // $e')),
+          loading: () => const ModuleLoadingState(
+            title: 'Loading bills',
+            subtitle: 'Getting your reminders ready.',
+          ),
+          error: (_, __) => ModuleErrorState(
+            title: 'Could not load bills',
+            subtitle: 'Please try refreshing finance data.',
+            onRetry: () => ref.invalidate(billListProvider),
+          ),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('ERROR // $e')),
+        loading: () => const ModuleLoadingState(
+          title: 'Loading finance data',
+          subtitle: 'Crunching your latest activity.',
+        ),
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load transactions',
+          subtitle: 'Please try refreshing finance data.',
+          onRetry: () => ref.invalidate(transactionListProvider),
+        ),
       ),
     );
   }
@@ -98,11 +113,12 @@ class FinanceView extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         if (bills.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('NO BILLS YET')),
-            ),
+          ModuleEmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'No bills yet',
+            subtitle: 'Add bill reminders to avoid missing due dates.',
+            actionLabel: 'ADD BILL',
+            onAction: () => _showBillEditor(context, ref, currency),
           ),
         if (overdue.isNotEmpty) ...[
           const Padding(
@@ -291,7 +307,11 @@ class FinanceView extends ConsumerWidget {
             height: 240,
             padding: const EdgeInsets.all(24),
             child: txs.isEmpty
-                ? const Center(child: Text('NO DATA AVAILABLE'))
+                ? const ModuleEmptyState(
+                    icon: Icons.insights_outlined,
+                    title: 'No chart data yet',
+                    subtitle: 'Add a few transactions to view monthly trends.',
+                  )
                 : _FinanceChart(txs: txs),
           ),
         ),
@@ -316,11 +336,10 @@ class FinanceView extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         if (txs.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: Text('NO TRANSACTIONS RECORDED')),
-            ),
+          const ModuleEmptyState(
+            icon: Icons.payments_outlined,
+            title: 'No transactions yet',
+            subtitle: 'Log your first transaction to start tracking money.',
           )
         else
           ...txs

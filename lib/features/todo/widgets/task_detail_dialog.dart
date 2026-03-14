@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task_model.dart';
 import '../providers/todo_provider.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../../../shared/utils/time_picker_helper.dart';
 
 class TaskDetailDialog extends ConsumerStatefulWidget {
@@ -95,8 +96,13 @@ class _TaskDetailDialogState extends ConsumerState<TaskDetailDialog> {
                       },
                     );
                   },
-                  loading: () => const CircularProgressIndicator(),
-                  error: (_, __) => const Text('Error loading categories'),
+                  loading: () => const ModuleInlineLoadingState(
+                    label: 'Loading categories',
+                  ),
+                  error: (_, __) => ModuleInlineErrorState(
+                    label: 'Could not load categories',
+                    onRetry: () => ref.invalidate(projectListProvider),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text('PRIORITY', style: Theme.of(context).textTheme.labelLarge),

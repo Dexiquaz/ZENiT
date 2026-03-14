@@ -42,6 +42,11 @@ class BillNotifier extends AsyncNotifier<List<Bill>> {
     return bills;
   }
 
+  Future<void> resyncBillReminders() async {
+    final bills = await _db.getBills();
+    await _syncAllBillReminders(bills);
+  }
+
   Future<void> addBill(Bill bill) async {
     final now = DateTime.now();
     final billToInsert = bill.copyWith(createdAt: now, updatedAt: now);

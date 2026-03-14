@@ -67,6 +67,13 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
     return _db.getTasks(projectId: projectId);
   }
 
+  Future<void> resyncTaskReminders() async {
+    final tasks = await _db.getTasks();
+    for (final task in tasks) {
+      await _syncTaskReminder(task);
+    }
+  }
+
   Future<void> addTask(Task task) async {
     final id = await _db.insertTask(task);
     await _syncTaskReminder(task.copyWith(id: id));

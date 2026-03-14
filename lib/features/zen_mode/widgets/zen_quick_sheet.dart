@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/module_state_view.dart';
 import '../../todo/models/task_model.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../providers/zen_mode_provider.dart';
+import '../views/zen_ambient_view.dart';
 
 void showZenQuickSheet(BuildContext context) {
   showModalBottomSheet<void>(
@@ -169,17 +171,11 @@ class _ZenQuickSheet extends ConsumerWidget {
                     ],
                   );
                 },
-                loading: () => const SizedBox(
-                  height: 24,
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-                error: (_, __) => Text(
-                  'Could not load tasks right now.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                loading: () =>
+                    const ModuleInlineLoadingState(label: 'Loading tasks'),
+                error: (_, __) => ModuleInlineErrorState(
+                  label: 'Could not load tasks right now.',
+                  onRetry: () => ref.invalidate(allTaskListProvider),
                 ),
               ),
             ],
@@ -226,6 +222,12 @@ class _ZenQuickSheet extends ConsumerWidget {
                   icon: const Icon(Icons.skip_next),
                   label: const Text('SKIP'),
                 ),
+                if (state.activeSessionId != null)
+                  OutlinedButton.icon(
+                    onPressed: () => _openAmbientAfterSheetClose(context),
+                    icon: const Icon(Icons.flip),
+                    label: const Text('AMBIENT VIEW'),
+                  ),
               ],
             ),
           ],
@@ -243,6 +245,7 @@ class _ZenQuickSheet extends ConsumerWidget {
 
     switch (result) {
       case FocusStartResult.started:
+        await _openAmbientAfterSheetClose(context);
         return;
       case FocusStartResult.missingLinkedTask:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -264,12 +267,29 @@ class _ZenQuickSheet extends ConsumerWidget {
     ZenTimerNotifier notifier,
   ) async {
     final result = await notifier.startQuickFocus();
-    if (!context.mounted || result == FocusStartResult.started) {
+    if (!context.mounted) {
+      return;
+    }
+
+    if (result == FocusStartResult.started) {
+      await _openAmbientAfterSheetClose(context);
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Unable to start quick focus right now.')),
+    );
+  }
+
+  Future<void> _openAmbientAfterSheetClose(BuildContext context) async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.pop();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const ZenAmbientView(),
+        settings: const RouteSettings(name: 'zen_ambient_focus'),
+      ),
     );
   }
 

@@ -19,6 +19,11 @@ class HabitNotifier extends AsyncNotifier<List<Habit>> {
     return habits;
   }
 
+  Future<void> resyncHabitReminders() async {
+    final habits = await _dbHelper.getHabits();
+    await _syncAllHabitReminders(habits);
+  }
+
   Future<void> addHabit(Habit habit) async {
     final id = await _dbHelper.insertHabit(habit);
     await _syncHabitReminder(habit.copyWith(id: id));

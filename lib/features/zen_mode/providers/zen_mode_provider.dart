@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/utils/database_helper.dart';
+import '../../finance/providers/finance_provider.dart';
+import '../../habit_tracker/providers/habit_provider.dart';
+import '../../todo/providers/todo_provider.dart';
 import '../models/focus_session.dart';
 
 enum FocusStartResult { started, missingLinkedTask, linkedTaskUnavailable }
@@ -145,13 +148,22 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
   final _db = DatabaseHelper();
   final _notifications = NotificationService.instance;
   Timer? _ticker;
+  bool _isNotificationSuppressionActive = false;
 
   @override
   ZenTimerState build() {
-    ref.onDispose(_stopTicker);
+    ref.onDispose(() {
+      _stopTicker();
+      unawaited(_notifications.setFocusModeSuppressed(false));
+    });
 
     ref.listen<AsyncValue<UserSettings>>(settingsProvider, (_, next) {
-      next.whenData(_syncDurationsFromSettings);
+      next.whenData((settings) {
+        _syncDurationsFromSettings(settings);
+        unawaited(
+          _syncFocusNotificationSuppression(settingsOverride: settings),
+        );
+      });
     });
 
     final settings = ref.read(settingsProvider);
@@ -232,6 +244,7 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
       linkedTaskTitle: taskTitle,
       sessionStartedAt: now,
     );
+    await _syncFocusNotificationSuppression();
     _startTicker();
     return FocusStartResult.started;
   }
@@ -275,6 +288,7 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
       focusDuration: state.focusDuration,
       breakDuration: state.breakDuration,
     ).copyWith(linkedTaskId: linkedTaskId, linkedTaskTitle: linkedTaskTitle);
+    await _syncFocusNotificationSuppression();
   }
 
   Future<void> skipPhase() async {
@@ -342,6 +356,7 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
   Future<void> _hydratePersistedSession() async {
     final session = await _db.getActiveFocusSession();
     if (session == null) {
+      await _syncFocusNotificationSuppression();
       return;
     }
 
@@ -351,10 +366,50 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
     }
 
     state = _stateFromSession(reconciledSession);
+    await _syncFocusNotificationSuppression();
 
     if (reconciledSession.status == FocusSessionStatus.running) {
       _startTicker();
     }
+  }
+
+  bool _resolveSilentFocusSetting(UserSettings? settings) {
+    if (settings != null) {
+      return settings.silentFocusNotifications;
+    }
+
+    final asyncSettings = ref.read(settingsProvider);
+    if (asyncSettings.hasValue) {
+      return asyncSettings.value!.silentFocusNotifications;
+    }
+
+    return true;
+  }
+
+  Future<void> _syncFocusNotificationSuppression({
+    UserSettings? settingsOverride,
+  }) async {
+    final shouldSuppress =
+        _resolveSilentFocusSetting(settingsOverride) &&
+        state.activeSessionId != null;
+
+    if (shouldSuppress == _isNotificationSuppressionActive) {
+      return;
+    }
+
+    await _notifications.setFocusModeSuppressed(shouldSuppress);
+    _isNotificationSuppressionActive = shouldSuppress;
+
+    if (!shouldSuppress) {
+      await _resyncSuppressedReminders();
+    }
+  }
+
+  Future<void> _resyncSuppressedReminders() async {
+    await ref.read(taskListProvider.notifier).resyncTaskReminders();
+    await ref.read(habitListProvider.notifier).resyncHabitReminders();
+    await ref.read(billListProvider.notifier).resyncBillReminders();
+    await ref.read(settingsProvider.notifier).resyncJournalPrompt();
   }
 
   void _startTicker() {

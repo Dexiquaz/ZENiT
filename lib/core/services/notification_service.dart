@@ -40,6 +40,9 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  bool _focusModeSuppressed = false;
+
+  bool get isFocusModeSuppressed => _focusModeSuppressed;
 
   Future<void> initialize() async {
     if (!_supportsNotifications()) return;
@@ -67,6 +70,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
     if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
@@ -137,6 +141,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
     if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) {
@@ -214,6 +219,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final minutes = nextDuration.inMinutes.clamp(1, 9999);
     final minutesLabel = minutes == 1 ? '1 minute' : '$minutes minutes';
@@ -260,6 +266,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final now = tz.TZDateTime.now(tz.local);
     late final tz.TZDateTime firstRun;
@@ -315,6 +322,7 @@ class NotificationService {
     if (!_initialized) {
       await initialize();
     }
+    if (_focusModeSuppressed) return;
 
     final now = tz.TZDateTime.now(tz.local);
     final firstRun = _nextDailyTrigger(now, reminderTime);
@@ -390,6 +398,26 @@ class NotificationService {
     }
     await _requestPermissions();
     return getPermissionStatus();
+  }
+
+  Future<void> setFocusModeSuppressed(bool suppressed) async {
+    if (!_supportsNotifications()) {
+      _focusModeSuppressed = suppressed;
+      return;
+    }
+    if (!_initialized) {
+      await initialize();
+    }
+    if (_focusModeSuppressed == suppressed) {
+      return;
+    }
+
+    _focusModeSuppressed = suppressed;
+
+    if (suppressed) {
+      await _plugin.cancel(_focusTransitionNotificationId);
+      await _plugin.cancelAll();
+    }
   }
 
   /// Check if the app can schedule exact alarms (Android 12+)

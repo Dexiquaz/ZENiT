@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/settings_provider.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../../todo/models/task_model.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../models/focus_session.dart';
 import '../providers/focus_history_provider.dart';
 import '../providers/focus_stats_provider.dart';
 import '../providers/zen_mode_provider.dart';
+import 'zen_ambient_view.dart';
 
 class ZenModeView extends ConsumerWidget {
   const ZenModeView({super.key});
@@ -20,6 +23,7 @@ class ZenModeView extends ConsumerWidget {
         ? null
         : ref.watch(taskFocusStatsProvider(state.linkedTaskId!));
     final recentSessions = ref.watch(recentFocusSessionsProvider);
+    final settingsState = ref.watch(settingsProvider);
     final focusMinutes = state.focusDuration.inMinutes.clamp(1, 60).toInt();
     final breakMinutes = state.breakDuration.inMinutes.clamp(1, 30).toInt();
 
@@ -207,12 +211,15 @@ class ZenModeView extends ConsumerWidget {
                       ],
                     );
                   },
-                  loading: () => const SizedBox(
-                    height: 56,
-                    child: Center(child: CircularProgressIndicator()),
+                  loading: () => const ModuleLoadingState(
+                    title: 'Loading tasks',
+                    subtitle: 'Preparing linked task options.',
                   ),
-                  error: (_, __) =>
-                      const Text('Could not load tasks for linking.'),
+                  error: (_, __) => ModuleErrorState(
+                    title: 'Could not load tasks',
+                    subtitle: 'Please try refreshing task data.',
+                    onRetry: () => ref.invalidate(allTaskListProvider),
+                  ),
                 ),
               ),
             ),
@@ -259,7 +266,36 @@ class ZenModeView extends ConsumerWidget {
                   icon: const Icon(Icons.skip_next),
                   label: const Text('SKIP'),
                 ),
+                if (state.activeSessionId != null)
+                  OutlinedButton.icon(
+                    onPressed: () => openZenAmbientView(context),
+                    icon: const Icon(Icons.flip),
+                    label: const Text('AMBIENT VIEW'),
+                  ),
               ],
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: settingsState.when(
+                data: (settings) => SwitchListTile.adaptive(
+                  value: settings.silentFocusNotifications,
+                  onChanged: (value) => ref
+                      .read(settingsProvider.notifier)
+                      .setSilentFocusNotifications(value),
+                  title: const Text('SILENT FOCUS'),
+                  subtitle: const Text(
+                    'Suppress ZENiT reminders while a focus session is active.',
+                  ),
+                ),
+                loading: () => const ListTile(
+                  title: Text('SILENT FOCUS'),
+                  subtitle: Text('Loading preference...'),
+                ),
+                error: (_, __) => const ListTile(
+                  title: Text('SILENT FOCUS'),
+                  subtitle: Text('Preference unavailable right now.'),
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             Text(
@@ -318,15 +354,14 @@ class ZenModeView extends ConsumerWidget {
                           .toList(growable: false),
                     );
                   },
-                  loading: () => const SizedBox(
-                    height: 48,
-                    child: Center(child: CircularProgressIndicator()),
+                  loading: () => const ModuleLoadingState(
+                    title: 'Loading session history',
+                    subtitle: 'Fetching your recent focus runs.',
                   ),
-                  error: (_, __) => Text(
-                    'Could not load session history.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  error: (_, __) => ModuleErrorState(
+                    title: 'Could not load session history',
+                    subtitle: 'Please try again.',
+                    onRetry: () => ref.invalidate(recentFocusSessionsProvider),
                   ),
                 ),
               ),
@@ -428,17 +463,11 @@ class ZenModeView extends ConsumerWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                loading: () => Text(
-                  'Loading focus stats...',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                loading: () => const ModuleInlineLoadingState(
+                  label: 'Loading focus stats',
                 ),
-                error: (_, __) => Text(
-                  'Focus stats unavailable',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                error: (_, __) => const ModuleInlineErrorState(
+                  label: 'Focus stats unavailable',
                 ),
               ),
             ],
@@ -457,6 +486,7 @@ class ZenModeView extends ConsumerWidget {
 
     switch (result) {
       case FocusStartResult.started:
+        await openZenAmbientView(context);
         return;
       case FocusStartResult.missingLinkedTask:
         ScaffoldMessenger.of(context).showSnackBar(
@@ -478,7 +508,12 @@ class ZenModeView extends ConsumerWidget {
     ZenTimerNotifier notifier,
   ) async {
     final result = await notifier.startQuickFocus();
-    if (!context.mounted || result == FocusStartResult.started) {
+    if (!context.mounted) {
+      return;
+    }
+
+    if (result == FocusStartResult.started) {
+      await openZenAmbientView(context);
       return;
     }
 

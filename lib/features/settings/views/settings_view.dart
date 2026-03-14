@@ -9,6 +9,7 @@ import '../../../core/utils/database_helper.dart';
 import '../../../core/utils/provider_helpers.dart';
 import '../../../shared/utils/time_picker_helper.dart';
 import '../../../shared/utils/ui_helpers.dart';
+import '../../../shared/widgets/module_state_view.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -263,8 +264,15 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
             ),
           ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => const ModuleLoadingState(
+          title: 'Loading settings',
+          subtitle: 'Preparing your preferences.',
+        ),
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load settings',
+          subtitle: 'Please try refreshing settings.',
+          onRetry: () => ref.invalidate(settingsProvider),
+        ),
       ),
     );
   }
