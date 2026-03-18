@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../shared/utils/date_utils.dart';
 import '../../habit_tracker/providers/habit_provider.dart';
 import '../../habit_tracker/models/habit.dart';
 import '../../todo/providers/todo_provider.dart';
@@ -466,8 +467,4 @@ class _ModuleButton extends StatelessWidget {
       ),
     );
   }
-}
-
-bool isSameDay(DateTime a, DateTime b) {
-  return a.year == b.year && a.month == b.month && a.day == b.day;
 }

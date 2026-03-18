@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:table_calendar/table_calendar.dart';
+import '../../../shared/utils/date_utils.dart';
 import '../../../shared/widgets/module_state_view.dart';
 import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
@@ -32,11 +32,6 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
     final isToday = isSameDay(_selectedDay, DateTime.now());
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('CALENDAR JOURNAL'),
-        centerTitle: true,
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
-      ),
       floatingActionButton: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
         transitionBuilder: (child, animation) {

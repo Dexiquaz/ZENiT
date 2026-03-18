@@ -27,7 +27,7 @@ Future<void> main() async {
     await NotificationService.instance.initialize();
   }
 
-  runApp(const ProviderScope(child: PersonalOrganizerApp()));
+  runApp(const ProviderScope(child: ZenitApp()));
 }
 
 final _router = GoRouter(
@@ -95,8 +95,8 @@ final _router = GoRouter(
   ],
 );
 
-class PersonalOrganizerApp extends ConsumerWidget {
-  const PersonalOrganizerApp({super.key});
+class ZenitApp extends ConsumerWidget {
+  const ZenitApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -113,10 +113,39 @@ class PersonalOrganizerApp extends ConsumerWidget {
         );
       },
       loading: () => const MaterialApp(
+        debugShowCheckedModeBanner: false,
         home: Scaffold(body: Center(child: CircularProgressIndicator())),
       ),
       error: (e, _) => MaterialApp(
-        home: Scaffold(body: Center(child: Text('INIT_ERROR // $e'))),
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+                  SizedBox(height: 16),
+                  Text(
+                    'ZENiT failed to start',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '$e',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
