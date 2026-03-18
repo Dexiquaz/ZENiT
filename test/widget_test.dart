@@ -5,7 +5,7 @@ import 'package:zenit/main.dart';
 
 void main() {
   testWidgets('App loads dashboard shell', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: PersonalOrganizerApp()));
+    await tester.pumpWidget(const ProviderScope(child: ZenitApp()));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(MaterialApp), findsOneWidget);

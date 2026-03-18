@@ -77,51 +77,26 @@ class NotificationService {
       return;
     }
 
-    try {
-      await _plugin.zonedSchedule(
-        _taskNotificationId(taskId),
-        'Task reminder',
-        taskTitle,
-        scheduledDate,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _taskChannelId,
-            _taskChannelName,
-            channelDescription: _taskChannelDescription,
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
+    await _plugin.zonedSchedule(
+      _taskNotificationId(taskId),
+      'Task reminder',
+      taskTitle,
+      scheduledDate,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _taskChannelId,
+          _taskChannelName,
+          channelDescription: _taskChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
         ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'task:$taskId',
-        matchDateTimeComponents: null,
-      );
-    } catch (e) {
-      debugPrint('Error scheduling task reminder: $e');
-      // Fallback to inexact if exact fails
-      await _plugin.zonedSchedule(
-        _taskNotificationId(taskId),
-        'Task reminder',
-        taskTitle,
-        scheduledDate,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _taskChannelId,
-            _taskChannelName,
-            channelDescription: _taskChannelDescription,
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: 'task:$taskId',
-        matchDateTimeComponents: null,
-      );
-    }
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'task:$taskId',
+      matchDateTimeComponents: null,
+    );
   }
 
   Future<void> cancelTaskReminder(int taskId) async {
@@ -148,50 +123,26 @@ class NotificationService {
       return;
     }
 
-    try {
-      await _plugin.zonedSchedule(
-        _billNotificationId(billId),
-        'Bill reminder',
-        billTitle,
-        scheduledDate,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _billChannelId,
-            _billChannelName,
-            channelDescription: _billChannelDescription,
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
+    await _plugin.zonedSchedule(
+      _billNotificationId(billId),
+      'Bill reminder',
+      billTitle,
+      scheduledDate,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _billChannelId,
+          _billChannelName,
+          channelDescription: _billChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
         ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'bill:$billId',
-        matchDateTimeComponents: null,
-      );
-    } catch (e) {
-      debugPrint('Error scheduling bill reminder: $e');
-      await _plugin.zonedSchedule(
-        _billNotificationId(billId),
-        'Bill reminder',
-        billTitle,
-        scheduledDate,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _billChannelId,
-            _billChannelName,
-            channelDescription: _billChannelDescription,
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            enableVibration: true,
-          ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: 'bill:$billId',
-        matchDateTimeComponents: null,
-      );
-    }
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'bill:$billId',
+      matchDateTimeComponents: null,
+    );
   }
 
   Future<void> cancelBillReminder(int billId) async {
@@ -301,7 +252,7 @@ class NotificationService {
           enableVibration: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'habit:$habitId',
       matchDateTimeComponents: components,
     );
@@ -345,7 +296,7 @@ class NotificationService {
           enableVibration: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: 'journal:daily',
       matchDateTimeComponents: DateTimeComponents.time,
     );
@@ -417,51 +368,6 @@ class NotificationService {
     if (suppressed) {
       await _plugin.cancel(_focusTransitionNotificationId);
       await _plugin.cancelAll();
-    }
-  }
-
-  /// Check if the app can schedule exact alarms (Android 12+)
-  Future<bool> canScheduleExactAlarms() async {
-    if (defaultTargetPlatform != TargetPlatform.android) {
-      return true; // Other platforms don't have this restriction
-    }
-
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-
-    if (androidPlugin == null) return false;
-
-    try {
-      final bool? canSchedule = await androidPlugin
-          .canScheduleExactNotifications();
-      return canSchedule ?? false;
-    } catch (e) {
-      debugPrint('Error checking exact alarm permission: $e');
-      return false;
-    }
-  }
-
-  /// Request permission to schedule exact alarms (Android 12+)
-  Future<bool> requestExactAlarmPermission() async {
-    if (defaultTargetPlatform != TargetPlatform.android) {
-      return true;
-    }
-
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-
-    if (androidPlugin == null) return false;
-
-    try {
-      final bool? result = await androidPlugin.requestExactAlarmsPermission();
-      return result ?? false;
-    } catch (e) {
-      debugPrint('Error requesting exact alarm permission: $e');
-      return false;
     }
   }
 

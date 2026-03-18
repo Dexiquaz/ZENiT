@@ -229,13 +229,23 @@ class TodoView extends ConsumerWidget {
                       ),
                       const SizedBox(height: 10),
                     ],
-                    ...pending.map((t) => _TaskTile(task: t)),
+                    ...pending.map(
+                      (t) => _TaskTile(
+                        task: t,
+                        onEdit: (task) => _showTaskEditor(context, ref, task),
+                      ),
+                    ),
                     if (completed.isNotEmpty) ...[
                       const Padding(
                         padding: EdgeInsets.only(top: 24, bottom: 8, left: 8),
                         child: Text('COMPLETED'),
                       ),
-                      ...completed.map((t) => _TaskTile(task: t)),
+                      ...completed.map(
+                        (t) => _TaskTile(
+                          task: t,
+                          onEdit: (task) => _showTaskEditor(context, ref, task),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 16),
                   ],
@@ -348,7 +358,8 @@ class TodoView extends ConsumerWidget {
 
 class _TaskTile extends ConsumerWidget {
   final Task task;
-  const _TaskTile({required this.task});
+  final void Function(Task) onEdit;
+  const _TaskTile({required this.task, required this.onEdit});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -365,9 +376,7 @@ class _TaskTile extends ConsumerWidget {
             ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
           : Theme.of(context).colorScheme.surfaceContainerLow,
       child: InkWell(
-        onTap: () =>
-            (context.findAncestorWidgetOfExactType<TodoView>() as TodoView)
-                ._showTaskEditor(context, ref, task),
+        onTap: () => onEdit(task),
         child: Padding(
           padding: const EdgeInsets.only(
             left: 12,

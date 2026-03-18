@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/data_export_service.dart';
@@ -23,14 +23,21 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   NotificationPermissionStatus _permissionStatus =
       NotificationPermissionStatus.unknown;
   bool _checkingPermission = true;
-  bool _canScheduleExactAlarms = false;
-  bool _checkingExactAlarms = true;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _refreshPermissionStatus();
-    _refreshExactAlarmStatus();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _appVersion = 'v${info.version}+${info.buildNumber}';
+    });
   }
 
   Future<void> _refreshPermissionStatus() async {
@@ -40,17 +47,6 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
     setState(() {
       _permissionStatus = status;
       _checkingPermission = false;
-    });
-  }
-
-  Future<void> _refreshExactAlarmStatus() async {
-    setState(() => _checkingExactAlarms = true);
-    final canSchedule = await NotificationService.instance
-        .canScheduleExactAlarms();
-    if (!mounted) return;
-    setState(() {
-      _canScheduleExactAlarms = canSchedule;
-      _checkingExactAlarms = false;
     });
   }
 
@@ -64,27 +60,6 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Notification permission: ${_permissionLabel(status)}'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _requestExactAlarmPermission(BuildContext context) async {
-    final granted = await NotificationService.instance
-        .requestExactAlarmPermission();
-    if (!mounted) return;
-
-    await _refreshExactAlarmStatus();
-
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            granted
-                ? 'Exact alarm permission granted'
-                : 'Please enable exact alarms in Settings',
-          ),
-          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -157,26 +132,6 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                         }
                       },
                     ),
-                    if (Platform.isAndroid) ...[
-                      dividerListTile,
-                      _buildListTile(
-                        context,
-                        title: 'Exact Alarm Permission',
-                        subtitle: _checkingExactAlarms
-                            ? 'Checking...'
-                            : _canScheduleExactAlarms
-                            ? 'Enabled (required for precise reminders)'
-                            : 'Tap to enable in Settings',
-                        icon: Icons.alarm_outlined,
-                        onTap: () async {
-                          if (!_canScheduleExactAlarms) {
-                            await _requestExactAlarmPermission(context);
-                          } else {
-                            await _refreshExactAlarmStatus();
-                          }
-                        },
-                      ),
-                    ],
                     dividerListTile,
                     _buildListTile(
                       context,
@@ -253,7 +208,9 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     _buildListTile(
                       context,
                       title: 'Version',
-                      subtitle: 'v1.3.2 (ZENiT)',
+                      subtitle: _appVersion.isEmpty
+                          ? 'Loading...'
+                          : _appVersion,
                       icon: Icons.info_outline,
                     ),
                   ],
