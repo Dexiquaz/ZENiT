@@ -51,21 +51,16 @@ final taskListProvider = AsyncNotifierProvider<TaskNotifier, List<Task>>(
   TaskNotifier.new,
 );
 
-final allTaskListProvider = FutureProvider<List<Task>>((ref) async {
-  // Re-evaluate whenever the filtered task provider changes.
-  ref.watch(taskListProvider);
-  return DatabaseHelper().getTasks();
-});
+final allTaskListProvider = Provider<AsyncValue<List<Task>>>(
+  (ref) => ref.watch(taskListProvider),
+);
 
 class TaskNotifier extends AsyncNotifier<List<Task>> {
   final _db = DatabaseHelper();
   final _notifications = NotificationService.instance;
 
   @override
-  Future<List<Task>> build() async {
-    final projectId = ref.watch(selectedProjectProvider);
-    return _db.getTasks(projectId: projectId);
-  }
+  Future<List<Task>> build() async => _db.getTasks();
 
   Future<void> resyncTaskReminders() async {
     final tasks = await _db.getTasks();

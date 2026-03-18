@@ -94,10 +94,18 @@ class _NotesTab extends ConsumerWidget {
                   onTap: () => _showNoteEditor(context, ref, note: list[i]),
                 ),
               ),
-        loading: () => const ModuleLoadingState(
-          title: 'Loading notes',
-          subtitle: 'Fetching your notes collection.',
-        ),
+        loading: () {
+          final width = MediaQuery.sizeOf(context).width;
+          final crossAxisCount = width > 900
+              ? 4
+              : width > 600
+              ? 3
+              : 2;
+          return ModuleGridSkeleton(
+            crossAxisCount: crossAxisCount,
+            itemCount: crossAxisCount * 3,
+          );
+        },
         error: (_, __) => ModuleErrorState(
           title: 'Could not load notes',
           subtitle: 'Please try refreshing notes.',
@@ -248,7 +256,11 @@ class _NoteCard extends ConsumerWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18),
-                    visualDensity: VisualDensity.compact,
+                    tooltip: 'DELETE NOTE',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
                     onPressed: () => ref
                         .read(noteListProvider.notifier)
                         .deleteNote(note.id!),
@@ -304,9 +316,11 @@ class _ShoppingTab extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const ModuleLoadingState(
-          title: 'Loading shopping list',
-          subtitle: 'Preparing your current items.',
+        loading: () => const ModuleCardListSkeleton(
+          itemCount: 7,
+          horizontalPadding: 16,
+          topPadding: 16,
+          bottomPadding: 110,
         ),
         error: (_, __) => ModuleErrorState(
           title: 'Could not load shopping list',
@@ -403,7 +417,7 @@ class _ShoppingTile extends ConsumerWidget {
         ),
         title: Text(
           item.name,
-          style: TextStyle(
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
             decoration: item.checked ? TextDecoration.lineThrough : null,
             color: item.checked
                 ? Theme.of(context).colorScheme.onSurfaceVariant

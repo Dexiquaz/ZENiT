@@ -211,10 +211,7 @@ class ZenModeView extends ConsumerWidget {
                       ],
                     );
                   },
-                  loading: () => const ModuleLoadingState(
-                    title: 'Loading tasks',
-                    subtitle: 'Preparing linked task options.',
-                  ),
+                  loading: () => const _LinkedTaskSkeleton(),
                   error: (_, __) => ModuleErrorState(
                     title: 'Could not load tasks',
                     subtitle: 'Please try refreshing task data.',
@@ -354,10 +351,7 @@ class ZenModeView extends ConsumerWidget {
                           .toList(growable: false),
                     );
                   },
-                  loading: () => const ModuleLoadingState(
-                    title: 'Loading session history',
-                    subtitle: 'Fetching your recent focus runs.',
-                  ),
+                  loading: () => const _SessionHistorySkeleton(),
                   error: (_, __) => ModuleErrorState(
                     title: 'Could not load session history',
                     subtitle: 'Please try again.',
@@ -594,5 +588,71 @@ class ZenModeView extends ConsumerWidget {
     final hour = timestamp.hour.toString().padLeft(2, '0');
     final minute = timestamp.minute.toString().padLeft(2, '0');
     return '$year.$month.$day $hour:$minute';
+  }
+}
+
+class _LinkedTaskSkeleton extends StatelessWidget {
+  const _LinkedTaskSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        ModuleSkeletonBlock(height: 16, radius: 8),
+        SizedBox(height: 10),
+        ModuleSkeletonBlock(width: 250, height: 12, radius: 6),
+        SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: ModuleSkeletonBlock(height: 36, radius: 18)),
+            SizedBox(width: 10),
+            Expanded(child: ModuleSkeletonBlock(height: 36, radius: 18)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionHistorySkeleton extends StatelessWidget {
+  const _SessionHistorySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [
+        _SessionHistorySkeletonTile(),
+        _SessionHistorySkeletonTile(),
+        _SessionHistorySkeletonTile(),
+      ],
+    );
+  }
+}
+
+class _SessionHistorySkeletonTile extends StatelessWidget {
+  const _SessionHistorySkeletonTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: const [
+          ModuleSkeletonBlock(width: 22, height: 22, radius: 11),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ModuleSkeletonBlock(height: 12, radius: 6),
+                SizedBox(height: 8),
+                ModuleSkeletonBlock(width: 220, height: 10, radius: 5),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

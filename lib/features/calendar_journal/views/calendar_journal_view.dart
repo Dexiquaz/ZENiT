@@ -136,10 +136,7 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
                       .toList(),
                 );
               },
-              loading: () => const ModuleLoadingState(
-                title: 'Loading journal entries',
-                subtitle: 'Checking entries for the selected day.',
-              ),
+              loading: () => const _JournalEntriesSkeleton(),
               error: (_, __) => ModuleErrorState(
                 title: 'Could not load journal entries',
                 subtitle: 'Please try selecting the day again.',
@@ -246,12 +243,12 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
                   children: [
                     Text(
                       day.toString(),
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: isToday && isSelected
-                            ? Colors.black
+                            ? Theme.of(context).colorScheme.onPrimary
                             : isToday && !isSelected
                             ? Theme.of(context).colorScheme.primary
-                            : Colors.white,
+                            : Theme.of(context).colorScheme.onSurface,
                         fontWeight: isSelected || isToday
                             ? FontWeight.bold
                             : FontWeight.w600,
@@ -336,7 +333,8 @@ class _CalendarJournalViewState extends ConsumerState<CalendarJournalView> {
                               (mood) => FilterChip(
                                 label: Text(
                                   mood,
-                                  style: const TextStyle(fontSize: 16),
+                                  style: Theme.of(ctx).textTheme.titleMedium
+                                      ?.copyWith(fontSize: 16),
                                 ),
                                 selected: selectedMood == mood,
                                 onSelected: (selected) {
@@ -502,7 +500,9 @@ void _showEditEntryDialog(
                             (mood) => FilterChip(
                               label: Text(
                                 mood,
-                                style: const TextStyle(fontSize: 16),
+                                style: Theme.of(
+                                  ctx,
+                                ).textTheme.titleMedium?.copyWith(fontSize: 16),
                               ),
                               selected: selectedMood == mood,
                               onSelected: (selected) {
@@ -634,7 +634,7 @@ class _EntryCard extends StatelessWidget {
                 children: [
                   Text(
                     entry.mood ?? '📝',
-                    style: const TextStyle(fontSize: 24),
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -704,5 +704,59 @@ class _EntryCard extends StatelessWidget {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+class _JournalEntriesSkeleton extends StatelessWidget {
+  const _JournalEntriesSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [
+        _JournalEntrySkeletonCard(),
+        _JournalEntrySkeletonCard(),
+        _JournalEntrySkeletonCard(),
+      ],
+    );
+  }
+}
+
+class _JournalEntrySkeletonCard extends StatelessWidget {
+  const _JournalEntrySkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Row(
+              children: [
+                ModuleSkeletonBlock(width: 28, height: 28, radius: 14),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ModuleSkeletonBlock(height: 14, radius: 7),
+                      SizedBox(height: 8),
+                      ModuleSkeletonBlock(width: 72, height: 10, radius: 5),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 12),
+            ModuleSkeletonBlock(height: 12, radius: 6),
+            SizedBox(height: 8),
+            ModuleSkeletonBlock(width: 220, height: 12, radius: 6),
+          ],
+        ),
+      ),
+    );
   }
 }

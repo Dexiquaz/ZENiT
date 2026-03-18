@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,29 +20,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       return;
     }
 
-    final shouldExit =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Exit ZENiT?'),
-            content: const Text('Do you want to close the app?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (shouldExit) {
-      SystemNavigator.pop();
-    }
+    // Keep users inside the app shell on back press from dashboard.
+    // This prevents accidental app exits from system back gestures/buttons.
+    widget.navigationShell.goBranch(0);
   }
 
   String _getModuleName(int index) {

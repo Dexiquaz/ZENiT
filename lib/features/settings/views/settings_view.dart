@@ -230,9 +230,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
               ),
             ],
           ),
-          loading: () => const ModuleLoadingState(
-            title: 'Loading settings',
-            subtitle: 'Preparing your preferences.',
+          loading: () => const ModuleCardListSkeleton(
+            itemCount: 5,
+            horizontalPadding: 24,
+            topPadding: 24,
+            bottomPadding: 48,
           ),
           error: (_, __) => ModuleErrorState(
             title: 'Could not load settings',
@@ -600,11 +602,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'WARNING: This will replace all current data with the imported data.',
-              style: TextStyle(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: Colors.orange,
+                color: Theme.of(context).colorScheme.tertiary,
               ),
             ),
             const SizedBox(height: 16),

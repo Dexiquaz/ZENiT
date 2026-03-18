@@ -47,9 +47,11 @@ class FinanceView extends ConsumerWidget {
               ],
             ),
           ),
-          loading: () => const ModuleLoadingState(
-            title: 'Loading bills',
-            subtitle: 'Getting your reminders ready.',
+          loading: () => const ModuleCardListSkeleton(
+            itemCount: 5,
+            horizontalPadding: 24,
+            topPadding: 24,
+            bottomPadding: 96,
           ),
           error: (_, __) => ModuleErrorState(
             title: 'Could not load bills',
@@ -57,9 +59,11 @@ class FinanceView extends ConsumerWidget {
             onRetry: () => ref.invalidate(billListProvider),
           ),
         ),
-        loading: () => const ModuleLoadingState(
-          title: 'Loading finance data',
-          subtitle: 'Crunching your latest activity.',
+        loading: () => const ModuleCardListSkeleton(
+          itemCount: 5,
+          horizontalPadding: 24,
+          topPadding: 24,
+          bottomPadding: 96,
         ),
         error: (_, __) => ModuleErrorState(
           title: 'Could not load transactions',

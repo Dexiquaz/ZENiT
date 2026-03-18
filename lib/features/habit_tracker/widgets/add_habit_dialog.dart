@@ -84,7 +84,6 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
                   child: SegmentedButton<HabitRecurrence>(
                     showSelectedIcon: false,
                     style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
                       textStyle: WidgetStatePropertyAll(
                         Theme.of(context).textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w700,

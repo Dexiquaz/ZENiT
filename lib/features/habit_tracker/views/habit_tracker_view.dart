@@ -51,16 +51,7 @@ class HabitTrackerView extends ConsumerWidget {
                 ModuleEmptyState(
                   icon: Icons.track_changes_outlined,
                   title: 'No habits tracked yet',
-                  subtitle: 'Create your first habit and start a streak.',
-                  actionLabel: 'NEW HABIT',
-                  onAction: () {
-                    showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      useSafeArea: true,
-                      builder: (context) => const AddHabitDialog(),
-                    );
-                  },
+                  subtitle: 'Use NEW HABIT below to start your first streak.',
                 )
               else
                 ListView.separated(
@@ -74,9 +65,11 @@ class HabitTrackerView extends ConsumerWidget {
             ],
           ),
         ),
-        loading: () => const ModuleLoadingState(
-          title: 'Loading habits',
-          subtitle: 'Building your habit board.',
+        loading: () => const ModuleCardListSkeleton(
+          itemCount: 4,
+          horizontalPadding: 24,
+          topPadding: 24,
+          bottomPadding: 104,
         ),
         error: (_, __) => ModuleErrorState(
           title: 'Could not load habits',
