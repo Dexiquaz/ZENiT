@@ -7,7 +7,6 @@ Your private daily OS. A comprehensive personal productivity app with no account
 - 🎯 **Dashboard** - Overview of all your daily activities
 - 🔄 **Habit Tracker** - Build and maintain daily habits
 - ✅ **Task Manager** - Organize your to-do lists
-- 💰 **Finance Tracker** - Monitor income, expenses, and balance
 - 📅 **Calendar & Journal** - Daily journaling with mood tracking
 - 📝 **Notes** - Quick note-taking
 - 🧘 **Zen Mode** - Pomodoro-style focus timer

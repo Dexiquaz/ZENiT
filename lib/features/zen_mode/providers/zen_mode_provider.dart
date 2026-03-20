@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../core/utils/database_helper.dart';
-import '../../finance/providers/finance_provider.dart';
 import '../../habit_tracker/providers/habit_provider.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../models/focus_session.dart';
@@ -408,7 +407,6 @@ class ZenTimerNotifier extends Notifier<ZenTimerState> {
   Future<void> _resyncSuppressedReminders() async {
     await ref.read(taskListProvider.notifier).resyncTaskReminders();
     await ref.read(habitListProvider.notifier).resyncHabitReminders();
-    await ref.read(billListProvider.notifier).resyncBillReminders();
     await ref.read(settingsProvider.notifier).resyncJournalPrompt();
   }
 

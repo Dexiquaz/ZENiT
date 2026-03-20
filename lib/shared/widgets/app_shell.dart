@@ -2,28 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class AppShell extends ConsumerStatefulWidget {
+class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
-
-  @override
-  ConsumerState<AppShell> createState() => _AppShellState();
-}
-
-class _AppShellState extends ConsumerState<AppShell> {
-  late int _lastSelectedNavIndex = 0;
-
-  Future<void> _handleBackPress(int currentIndex) async {
-    if (currentIndex != 0) {
-      widget.navigationShell.goBranch(0);
-      return;
-    }
-
-    // Keep users inside the app shell on back press from dashboard.
-    // This prevents accidental app exits from system back gestures/buttons.
-    widget.navigationShell.goBranch(0);
-  }
 
   String _getModuleName(int index) {
     switch (index) {
@@ -32,44 +14,55 @@ class _AppShellState extends ConsumerState<AppShell> {
       case 1:
         return 'FOCUS';
       case 2:
-        return 'SETTINGS';
-      case 3:
         return 'HABITS';
-      case 4:
+      case 3:
         return 'TASKS';
+      case 4:
+        return 'CALENDAR';
       case 5:
-        return 'JOURNAL';
-      case 6:
-        return 'FINANCE';
-      case 7:
         return 'NOTES';
+      case 6:
+        return 'SETTINGS';
       default:
         return '';
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final currentIndex = widget.navigationShell.currentIndex;
-    // Keep bottom nav selection in sync for visible tabs only.
-    if (currentIndex >= 0 && currentIndex <= 2) {
-      _lastSelectedNavIndex = currentIndex;
-    } else {
-      _lastSelectedNavIndex = 0;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentIndex = navigationShell.currentIndex;
+
+    // Primary bottom nav destinations (Focus is a separate quick action)
+    final bottomNavDestinations = const [
+      ('Dashboard', Icons.dashboard_outlined, Icons.dashboard),
+      ('Habits', Icons.track_changes_outlined, Icons.track_changes),
+      ('Tasks', Icons.checklist_rtl_outlined, Icons.checklist_rtl),
+      ('Calendar', Icons.calendar_month_outlined, Icons.calendar_month),
+      ('Notes', Icons.sticky_note_2_outlined, Icons.sticky_note_2),
+    ];
+
+    // Map branch index <-> bottom nav visible index
+    const bottomNavBranchMap = [0, 2, 3, 4, 6];
+
+    int getBottomNavIndex(int branchIndex) {
+      return bottomNavBranchMap.indexOf(branchIndex); // -1 if not in bottom nav
     }
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+    final bottomNavIndex = getBottomNavIndex(currentIndex);
 
-        await _handleBackPress(widget.navigationShell.currentIndex);
+    return PopScope(
+      canPop: currentIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (currentIndex != 0) {
+          navigationShell.goBranch(0); // Go to Dashboard
+        }
       },
       child: Scaffold(
         appBar: AppBar(
           title: GestureDetector(
             onTap: () {
-              widget.navigationShell.goBranch(0);
+              navigationShell.goBranch(0);
             },
             child: Row(
               children: [
@@ -102,30 +95,45 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ),
           centerTitle: false,
-        ),
-        body: widget.navigationShell,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _lastSelectedNavIndex,
-          onDestinationSelected: (i) {
-            widget.navigationShell.goBranch(i);
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard),
-              label: 'DASHBOARD',
+          actions: [
+            IconButton(
+              tooltip: 'Focus',
+              onPressed: () {
+                navigationShell.goBranch(1);
+              },
+              icon: Icon(
+                currentIndex == 1 ? Icons.timer : Icons.timer_outlined,
+              ),
             ),
-            NavigationDestination(
-              icon: Icon(Icons.timer_outlined),
-              selectedIcon: Icon(Icons.timer),
-              label: 'FOCUS',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'SETTINGS',
+            IconButton(
+              tooltip: 'Settings',
+              onPressed: () {
+                navigationShell.goBranch(6);
+              },
+              icon: Icon(
+                currentIndex == 6 ? Icons.settings : Icons.settings_outlined,
+              ),
             ),
           ],
+        ),
+        body: navigationShell,
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: bottomNavIndex >= 0 ? bottomNavIndex : 0,
+          onDestinationSelected: (index) {
+            final branchIndex = index < bottomNavBranchMap.length
+                ? bottomNavBranchMap[index]
+                : 0;
+            navigationShell.goBranch(branchIndex);
+          },
+          destinations: bottomNavDestinations
+              .map(
+                ((String, IconData, IconData) item) => NavigationDestination(
+                  icon: Icon(item.$2),
+                  selectedIcon: Icon(item.$3),
+                  label: item.$1,
+                ),
+              )
+              .toList(),
         ),
       ),
     );

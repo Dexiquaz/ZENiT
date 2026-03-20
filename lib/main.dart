@@ -13,7 +13,6 @@ import 'features/zen_mode/views/zen_mode_view.dart';
 import 'features/habit_tracker/views/habit_tracker_view.dart';
 import 'features/todo/views/todo_view.dart';
 import 'features/calendar_journal/views/calendar_journal_view.dart';
-import 'features/finance/views/finance_view.dart';
 import 'features/notes_shopping/views/notes_shopping_view.dart';
 
 Future<void> main() async {
@@ -38,24 +37,19 @@ final _router = GoRouter(
         return AppShell(navigationShell: navigationShell);
       },
       branches: [
+        // 0: Dashboard
         StatefulShellBranch(
           routes: [
             GoRoute(path: '/', builder: (_, __) => const DashboardView()),
           ],
         ),
+        // 1: Focus (Zen Mode)
         StatefulShellBranch(
           routes: [
             GoRoute(path: '/focus', builder: (_, __) => const ZenModeView()),
           ],
         ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/settings',
-              builder: (_, __) => const SettingsView(),
-            ),
-          ],
-        ),
+        // 2: Habits
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -64,11 +58,13 @@ final _router = GoRouter(
             ),
           ],
         ),
+        // 3: Tasks
         StatefulShellBranch(
           routes: [
             GoRoute(path: '/tasks', builder: (_, __) => const TodoView()),
           ],
         ),
+        // 4: Calendar & Journal
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -77,16 +73,21 @@ final _router = GoRouter(
             ),
           ],
         ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(path: '/finance', builder: (_, __) => const FinanceView()),
-          ],
-        ),
+        // 5: Notes & Shopping
         StatefulShellBranch(
           routes: [
             GoRoute(
               path: '/notes',
               builder: (_, __) => const NotesShoppingView(),
+            ),
+          ],
+        ),
+        // 6: Settings
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/settings',
+              builder: (_, __) => const SettingsView(),
             ),
           ],
         ),
@@ -107,7 +108,8 @@ class ZenitApp extends ConsumerWidget {
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
           title: 'ZENiT',
-          theme: AppTheme.premiumDark,
+          theme: AppTheme.premiumLight,
+          darkTheme: AppTheme.premiumDark,
           themeMode: ThemeMode.dark,
           routerConfig: _router,
         );

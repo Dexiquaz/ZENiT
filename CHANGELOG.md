@@ -8,7 +8,7 @@ All notable changes to ZENiT are documented in this file.
 - AMOLED-style Focus Ambient View with immersive full-screen presentation, drifted clock layout, and quick controls.
 - Direct Ambient View launch from both the main Focus screen and Zen quick sheet.
 - Silent Focus setting to suppress scheduled app reminders while a focus session is active.
-- Reminder resync flow after focus suppression is lifted (tasks, habits, bills, and journal prompt reminders).
+- Reminder resync flow after focus suppression is lifted (tasks, habits, and journal prompt reminders).
 - Shared module state components for consistent empty, loading, and error UI patterns.
 - Inline state components for compact in-card async feedback (loader and error with optional retry).
 - Task-level focus stats surfaced in both Tasks and Focus (today minutes and weekly cycles).

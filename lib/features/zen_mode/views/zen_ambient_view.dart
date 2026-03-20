@@ -24,6 +24,7 @@ class ZenAmbientView extends ConsumerStatefulWidget {
 }
 
 class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
+  static const _orientationChannel = MethodChannel('zenit/orientation');
   static const _driftOffsets = <Offset>[
     Offset(0, 0),
     Offset(8, -5),
@@ -52,6 +53,7 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
   }
 
   Future<void> _enterAmbientPresentation() async {
+    await _setAmbientRotationOverride();
     await WakelockPlus.enable();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
@@ -59,6 +61,31 @@ class _ZenAmbientViewState extends ConsumerState<ZenAmbientView> {
   Future<void> _exitAmbientPresentation() async {
     await WakelockPlus.disable();
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await _clearAmbientRotationOverride();
+  }
+
+  Future<void> _setAmbientRotationOverride() async {
+    try {
+      await _orientationChannel.invokeMethod<void>(
+        'setAmbientRotationOverride',
+      );
+    } on MissingPluginException {
+      // Non-Android platforms do not expose this channel.
+    } on PlatformException {
+      // Keep Ambient usable even when orientation override fails.
+    }
+  }
+
+  Future<void> _clearAmbientRotationOverride() async {
+    try {
+      await _orientationChannel.invokeMethod<void>(
+        'clearAmbientRotationOverride',
+      );
+    } on MissingPluginException {
+      // Non-Android platforms do not expose this channel.
+    } on PlatformException {
+      // No-op when cleanup fails; app falls back to system behavior.
+    }
   }
 
   Future<void> _requestCloseAmbient() async {

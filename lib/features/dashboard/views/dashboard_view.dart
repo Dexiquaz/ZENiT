@@ -7,8 +7,6 @@ import '../../habit_tracker/providers/habit_provider.dart';
 import '../../habit_tracker/models/habit.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../../todo/models/task_model.dart';
-import '../../finance/providers/finance_provider.dart';
-import '../../finance/models/transaction_model.dart';
 import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
 import '../../zen_mode/providers/zen_mode_provider.dart';
@@ -29,7 +27,6 @@ class DashboardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final habitState = ref.watch(habitListProvider);
     final taskState = ref.watch(taskListProvider);
-    final financeState = ref.watch(transactionListProvider);
     final journalState = ref.watch(journalProvider);
     final noteState = ref.watch(noteListProvider);
     final zenState = ref.watch(zenTimerProvider);
@@ -37,7 +34,6 @@ class DashboardView extends ConsumerWidget {
     final isFirstRunEmptyState =
         _isLoadedAndEmpty(habitState) &&
         _isLoadedAndEmpty(taskState) &&
-        _isLoadedAndEmpty(financeState) &&
         _isLoadedAndEmpty(journalState) &&
         _isLoadedAndEmpty(noteState);
 
@@ -116,7 +112,6 @@ class DashboardView extends ConsumerWidget {
                 context,
                 habitState,
                 taskState,
-                financeState,
                 journalState,
                 noteState,
               ),
@@ -130,7 +125,6 @@ class DashboardView extends ConsumerWidget {
     BuildContext context,
     AsyncValue<List<Habit>> habitState,
     AsyncValue<List<Task>> taskState,
-    AsyncValue<List<Transaction>> financeState,
     AsyncValue<List<JournalEntry>> journalState,
     AsyncValue<List<Note>> noteState,
   ) {
@@ -152,12 +146,12 @@ class DashboardView extends ConsumerWidget {
               summaryValue: '$completedTodayCount / ${habits.length}',
               summarySubtitle: 'today',
               details: habits.isEmpty
-                  ? const Text('No habits yet. add your first habit')
+                  ? const Text('No habits yet. Add your first habit')
                   : hasPending
                   ? Text(
                       'Pending: ${pending.take(2).map((h) => h.title).join(', ')}${pending.length > 2 ? '...' : ''}',
                     )
-                  : const Text('All daily protocols completed.'),
+                  : const Text('All daily habits completed.'),
             );
           },
           loading: () => const _ModuleButtonSkeleton(
@@ -272,51 +266,6 @@ class DashboardView extends ConsumerWidget {
             summaryValue: 'ERR',
             summarySubtitle: 'issue',
             details: const Text('Could not load calendar. Tap to open module.'),
-          ),
-        ),
-        const SizedBox(height: 16),
-        financeState.when(
-          data: (txs) {
-            final balance = txs.fold<double>(
-              0,
-              (sum, t) => t.isIncome ? sum + t.amount : sum - t.amount,
-            );
-            final recent = txs.take(2).toList();
-            return _ModuleButton(
-              title: 'FINANCE',
-              icon: Icons.account_balance_wallet_outlined,
-              navigationPath: '/finance',
-              summaryValue: balance.toStringAsFixed(0),
-              summarySubtitle: 'net assets',
-              details: recent.isEmpty
-                  ? const Text('No recent transaction logs.')
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: recent
-                          .map(
-                            (t) => Text(
-                              '${t.isIncome ? '+' : '-'}${t.amount} (${t.category})',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          )
-                          .toList(),
-                    ),
-            );
-          },
-          loading: () => const _ModuleButtonSkeleton(
-            title: 'FINANCE',
-            icon: Icons.account_balance_wallet_outlined,
-          ),
-          error: (_, __) => _ModuleButton(
-            title: 'FINANCE',
-            icon: Icons.error_outline,
-            navigationPath: '/finance',
-            summaryValue: 'ERR',
-            summarySubtitle: 'issue',
-            details: const Text(
-              'Could not load finance data. Tap to open module.',
-            ),
           ),
         ),
         const SizedBox(height: 16),

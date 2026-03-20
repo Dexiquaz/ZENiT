@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart' hide Transaction;
+import 'package:sqflite/sqflite.dart';
 import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
-import '../../features/finance/models/bill_model.dart';
-import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
 import '../../features/zen_mode/models/focus_session.dart';
 
@@ -25,7 +23,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'personal_organizer.db');
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -67,31 +65,6 @@ class DatabaseHelper {
         FOREIGN KEY(task_id) REFERENCES tasks(id)
       )''');
     await db.execute('''
-      CREATE TABLE transactions_log(
-        id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT, amount REAL,
-        category TEXT, is_income INTEGER, date TEXT
-      )''');
-    await db.execute('''
-      CREATE TABLE bills(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        amount REAL NOT NULL,
-        due_date TEXT NOT NULL,
-        recurrence INTEGER NOT NULL DEFAULT 0,
-        reminder_enabled INTEGER NOT NULL DEFAULT 1,
-        lead_minutes INTEGER NOT NULL DEFAULT 0,
-        paid INTEGER NOT NULL DEFAULT 0,
-        paid_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )''');
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date)',
-    );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_bills_paid ON bills(paid)',
-    );
-    await db.execute('''
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT,
         folder TEXT, tags TEXT, created_at TEXT
@@ -121,9 +94,6 @@ class DatabaseHelper {
       );
       await db.execute(
         'CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, project_id INTEGER, parent_id INTEGER, priority INTEGER, due_date TEXT, completed INTEGER, created_at TEXT)',
-      );
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS transactions_log(id INTEGER PRIMARY KEY AUTOINCREMENT, description TEXT, amount REAL, category TEXT, is_income INTEGER, date TEXT)',
       );
       await db.execute(
         'CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT, folder TEXT, tags TEXT, created_at TEXT)',
@@ -237,26 +207,9 @@ class DatabaseHelper {
       )''');
     }
 
-    if (oldVersion < 8) {
-      await db.execute('''CREATE TABLE IF NOT EXISTS bills(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        amount REAL NOT NULL,
-        due_date TEXT NOT NULL,
-        recurrence INTEGER NOT NULL DEFAULT 0,
-        reminder_enabled INTEGER NOT NULL DEFAULT 1,
-        lead_minutes INTEGER NOT NULL DEFAULT 0,
-        paid INTEGER NOT NULL DEFAULT 0,
-        paid_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )''');
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_bills_due_date ON bills(due_date)',
-      );
-      await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_bills_paid ON bills(paid)',
-      );
+    if (oldVersion < 9) {
+      await db.execute('DROP TABLE IF EXISTS transactions_log');
+      await db.execute('DROP TABLE IF EXISTS bills');
     }
   }
 
@@ -386,7 +339,6 @@ class DatabaseHelper {
       await txn.delete('tasks');
       await txn.delete('focus_sessions');
       await txn.delete('projects');
-      await txn.delete('transactions_log');
       await txn.delete('notes');
       await txn.delete('shopping_items');
       await txn.delete('journal_entries');
@@ -395,44 +347,6 @@ class DatabaseHelper {
       await txn.insert('projects', {'name': 'WORK OPS'});
     });
   }
-
-  // ── Transactions ──
-  Future<int> insertTransaction(Transaction t) async =>
-      (await database).insert('transactions_log', t.toMap());
-  Future<List<Transaction>> getTransactions() async =>
-      (await (await database).query(
-        'transactions_log',
-        orderBy: 'date DESC',
-      )).map(Transaction.fromMap).toList();
-  Future<int> deleteTransaction(int id) async => (await database).delete(
-    'transactions_log',
-    where: 'id = ?',
-    whereArgs: [id],
-  );
-
-  // ── Bills ──
-  Future<int> insertBill(Bill bill) async =>
-      (await database).insert('bills', bill.toMap());
-
-  Future<List<Bill>> getBills({bool includePaid = true}) async {
-    final db = await database;
-    final maps = await db.query(
-      'bills',
-      where: includePaid ? null : 'paid = 0',
-      orderBy: 'paid ASC, due_date ASC',
-    );
-    return maps.map(Bill.fromMap).toList();
-  }
-
-  Future<int> updateBill(Bill bill) async => (await database).update(
-    'bills',
-    bill.toMap(),
-    where: 'id = ?',
-    whereArgs: [bill.id],
-  );
-
-  Future<int> deleteBill(int id) async =>
-      (await database).delete('bills', where: 'id = ?', whereArgs: [id]);
 
   // ── Notes ──
   Future<int> insertNote(Note n) async =>
