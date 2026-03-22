@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/providers/pro_access_provider.dart';
+import '../../../shared/utils/ui_helpers.dart';
 import '../models/habit.dart';
 import '../providers/habit_provider.dart';
 import '../../../shared/utils/time_picker_helper.dart';
@@ -223,9 +226,15 @@ class _AddHabitDialogState extends ConsumerState<AddHabitDialog> {
           : null,
       createdAt: DateTime.now(),
     );
-    await ref.read(habitListProvider.notifier).addHabit(newHabit);
-    if (mounted) {
-      Navigator.pop(context);
+    try {
+      await ref.read(habitListProvider.notifier).addHabit(newHabit);
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } on ProFeatureLimitException catch (error) {
+      if (!mounted) return;
+      showWarningSnackBar(context, error.message);
+      context.push('/upgrade');
     }
   }
 

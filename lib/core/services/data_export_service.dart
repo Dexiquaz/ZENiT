@@ -42,7 +42,6 @@ class DataExportService {
       final tasks = await _db.getTasks();
       final projects = await _db.getProjects();
       final notes = await _db.getNotes();
-      final shoppingItems = await _db.getShoppingItems();
       final journalEntries = await _db.getAllJournalEntries();
       final focusSessions = await _db.getFocusSessions();
 
@@ -58,7 +57,7 @@ class DataExportService {
               .map((p) => {'id': p.id, 'name': p.name})
               .toList(),
           'notes': notes.map((n) => n.toMap()).toList(),
-          'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(),
+          // 'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(), // Shopping now handled via notes
           'journalEntries': journalEntries.map((j) => j.toMap()).toList(),
           'focusSessions': focusSessions
               .map((session) => session.toMap())
@@ -243,23 +242,7 @@ class DataExportService {
             .toList(),
       );
 
-      // Export shopping items
-      final shoppingItems = await _db.getShoppingItems();
-      await _writeCsvFile(
-        '${exportDir.path}/shopping_items.csv',
-        ['id', 'name', 'quantity', 'category', 'checked'],
-        shoppingItems
-            .map(
-              (s) => [
-                s.id?.toString() ?? '',
-                _escapeCsv(s.name),
-                s.quantity.toString(),
-                _escapeCsv(s.category),
-                s.checked ? '1' : '0',
-              ],
-            )
-            .toList(),
-      );
+      // Shopping items export removed; handled via notes
 
       // Export journal entries
       final now = DateTime.now();
@@ -408,13 +391,7 @@ class DataExportService {
         await _db.insertNote(note.copyWith(id: null));
       }
 
-      // Import shopping items
-      final shoppingData = importData['shoppingItems'] as List<dynamic>? ?? [];
-      for (final s in shoppingData) {
-        if (s is! Map<String, dynamic>) continue;
-        final item = ShoppingItem.fromMap(s);
-        await _db.insertShoppingItem(item.copyWith(id: null));
-      }
+      // Shopping items import removed; handled via notes
 
       // Import journal entries
       final journalData = importData['journalEntries'] as List<dynamic>? ?? [];

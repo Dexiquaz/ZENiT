@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
+import 'secure_storage_helper.dart';
 import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
 import '../../features/notes_shopping/models/models.dart';
@@ -12,21 +15,68 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static Database? _database;
+  static Future<Database>? _databaseFuture;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+
+    // If initialization is already in progress, wait for it
+    if (_databaseFuture != null) {
+      return await _databaseFuture!;
+    }
+
+    // Start initialization and store the future to prevent duplicate parallel calls
+    _databaseFuture = _initDatabase().catchError((error) {
+      _databaseFuture = null; // Reset on failure so we can retry later
+      throw error;
+    });
+
+    _database = await _databaseFuture;
+    _databaseFuture = null; // Clean up
     return _database!;
   }
 
   Future<Database> _initDatabase() async {
-    final path = join(await getDatabasesPath(), 'personal_organizer.db');
-    return await openDatabase(
-      path,
-      version: 9,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+    final path = join(await getDatabasesPath(), 'personal_organizer_secure.db');
+
+    String? encryptionKey = await SecureStorageHelper.getString(
+      'db_encryption_key',
     );
+    if (encryptionKey == null) {
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      encryptionKey = base64UrlEncode(values);
+      await SecureStorageHelper.setString('db_encryption_key', encryptionKey);
+    }
+
+    try {
+      return await openDatabase(
+        path,
+        password: encryptionKey,
+        version: 9,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    } catch (e) {
+      try {
+        await deleteDatabase(path);
+      } catch (_) {
+        // Ignore deletion errors during reset
+      }
+
+      final random = Random.secure();
+      final values = List<int>.generate(32, (i) => random.nextInt(256));
+      final newKey = base64UrlEncode(values);
+      await SecureStorageHelper.setString('db_encryption_key', newKey);
+
+      return await openDatabase(
+        path,
+        password: newKey,
+        version: 9,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -67,13 +117,9 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT,
-        folder TEXT, tags TEXT, created_at TEXT
+        list_items TEXT, type TEXT, folder TEXT, tags TEXT, created_at TEXT
       )''');
-    await db.execute('''
-      CREATE TABLE shopping_items(
-        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, quantity INTEGER,
-        category TEXT, checked INTEGER
-      )''');
+    // Removed shopping_items table; shopping is now handled via list notes
     await db.execute('''
       CREATE TABLE journal_entries(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,32 +130,21 @@ class DatabaseHelper {
       )''');
     // Seed default project
     await db.insert('projects', {'name': 'PERSONAL'});
-    await db.insert('projects', {'name': 'WORK OPS'});
+    await db.insert('projects', {'name': 'WORK'});
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS projects(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)',
-      );
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, project_id INTEGER, parent_id INTEGER, priority INTEGER, due_date TEXT, completed INTEGER, created_at TEXT)',
-      );
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, content TEXT, folder TEXT, tags TEXT, created_at TEXT)',
-      );
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS shopping_items(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, quantity INTEGER, category TEXT, checked INTEGER)',
-      );
-      await db.execute(
-        'CREATE TABLE IF NOT EXISTS journal_entries(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT UNIQUE, content TEXT)',
-      );
-      await db.insert('projects', {
-        'name': 'PERSONAL',
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-      await db.insert('projects', {
-        'name': 'WORK OPS',
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    if (oldVersion < 10) {
+      // Add list_items and type columns to notes if not present
+      final noteColumns = await db.rawQuery('PRAGMA table_info(notes)');
+      final hasListItems = noteColumns.any((c) => c['name'] == 'list_items');
+      final hasType = noteColumns.any((c) => c['name'] == 'type');
+      if (!hasListItems) {
+        await db.execute('ALTER TABLE notes ADD COLUMN list_items TEXT');
+      }
+      if (!hasType) {
+        await db.execute('ALTER TABLE notes ADD COLUMN type TEXT');
+      }
     }
 
     if (oldVersion < 3) {
@@ -344,40 +379,69 @@ class DatabaseHelper {
       await txn.delete('journal_entries');
 
       await txn.insert('projects', {'name': 'PERSONAL'});
-      await txn.insert('projects', {'name': 'WORK OPS'});
+      await txn.insert('projects', {'name': 'WORK'});
     });
   }
 
   // ── Notes ──
-  Future<int> insertNote(Note n) async =>
-      (await database).insert('notes', n.toMap());
-  Future<List<Note>> getNotes() async => (await (await database).query(
-    'notes',
-    orderBy: 'created_at DESC',
-  )).map(Note.fromMap).toList();
-  Future<int> updateNote(Note n) async => (await database).update(
-    'notes',
-    n.toMap(),
-    where: 'id = ?',
-    whereArgs: [n.id],
-  );
+  Future<int> insertNote(Note n) async {
+    final map = n.toMap();
+    map['list_items'] = n.listItems.isEmpty
+        ? null
+        : jsonEncode(n.listItems.map((e) => e.toMap()).toList());
+    map['type'] = n.type.name;
+    return (await database).insert('notes', map);
+  }
+
+  Future<List<Note>> getNotes() async {
+    final notes = await (await database).query(
+      'notes',
+      orderBy: 'created_at DESC',
+    );
+    return notes.map((map) {
+      final listItemsRaw = map['list_items'];
+      List<NoteListItem> listItems = [];
+      if (listItemsRaw != null &&
+          listItemsRaw is String &&
+          listItemsRaw.isNotEmpty) {
+        final decoded = jsonDecode(listItemsRaw);
+        if (decoded is List) {
+          listItems = decoded
+              .map<NoteListItem>((e) => NoteListItem.fromMap(e))
+              .toList();
+        }
+      }
+      return Note(
+        id: map['id'] as int?,
+        title: map['title'] as String,
+        content: map['content'] as String? ?? '',
+        listItems: listItems,
+        type: (map['type'] == 'list') ? NoteType.list : NoteType.text,
+        folder: map['folder'] as String? ?? 'ALL',
+        tags: map['tags'] as String? ?? '',
+        createdAt: DateTime.parse(map['created_at'] as String),
+      );
+    }).toList();
+  }
+
+  Future<int> updateNote(Note n) async {
+    final map = n.toMap();
+    map['list_items'] = n.listItems.isEmpty
+        ? null
+        : jsonEncode(n.listItems.map((e) => e.toMap()).toList());
+    map['type'] = n.type.name;
+    return (await database).update(
+      'notes',
+      map,
+      where: 'id = ?',
+      whereArgs: [n.id],
+    );
+  }
+
   Future<int> deleteNote(int id) async =>
       (await database).delete('notes', where: 'id = ?', whereArgs: [id]);
 
-  // ── Shopping ──
-  Future<int> insertShoppingItem(ShoppingItem s) async =>
-      (await database).insert('shopping_items', s.toMap());
-  Future<List<ShoppingItem>> getShoppingItems() async =>
-      (await (await database).query(
-        'shopping_items',
-      )).map(ShoppingItem.fromMap).toList();
-  Future<int> updateShoppingItem(ShoppingItem s) async => (await database)
-      .update('shopping_items', s.toMap(), where: 'id = ?', whereArgs: [s.id]);
-  Future<int> deleteShoppingItem(int id) async => (await database).delete(
-    'shopping_items',
-    where: 'id = ?',
-    whereArgs: [id],
-  );
+  // Shopping is now handled via list notes
 
   // ── Journal ──
   Future<void> insertJournalEntry(JournalEntry j) async {

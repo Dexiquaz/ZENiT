@@ -10,7 +10,6 @@ void invalidateAllProviders(WidgetRef ref) {
   ref.invalidate(projectListProvider);
   ref.invalidate(taskListProvider);
   ref.invalidate(noteListProvider);
-  ref.invalidate(shoppingListProvider);
   ref.invalidate(journalProvider);
   ref.invalidate(zenTimerProvider);
 }

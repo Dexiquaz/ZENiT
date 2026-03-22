@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../../../shared/utils/ui_helpers.dart';
 import '../../../shared/widgets/module_state_view.dart';
 import '../../zen_mode/providers/focus_stats_provider.dart';
@@ -15,6 +17,11 @@ class TodoView extends ConsumerWidget {
     final projects = ref.watch(projectListProvider);
     final tasksData = ref.watch(allTaskListProvider);
     final selectedProject = ref.watch(selectedProjectProvider);
+    final proNotifier = ref.read(proAccessProvider.notifier);
+    final taskList = tasksData.hasValue ? tasksData.value! : <Task>[];
+    final activeTaskCount = taskList.where((task) => !task.completed).length;
+    final taskGateDecision = proNotifier.taskCreationDecision(activeTaskCount);
+    final canCreateTask = taskGateDecision.allowed;
 
     return Scaffold(
       bottomNavigationBar: Container(
@@ -32,7 +39,9 @@ class TodoView extends ConsumerWidget {
         ),
         child: SafeArea(
           child: ElevatedButton.icon(
-            onPressed: () => _showTaskEditor(context, ref),
+            onPressed: canCreateTask
+                ? () => _showTaskEditor(context, ref)
+                : () => context.push('/upgrade'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.primary,
               foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -41,7 +50,9 @@ class TodoView extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            icon: const Icon(Icons.add),
+            icon: Icon(
+              canCreateTask ? Icons.add : Icons.workspace_premium_outlined,
+            ),
             label: Text(
               'ADD TASK',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -299,9 +310,15 @@ class TodoView extends ConsumerWidget {
 
     if (result != null) {
       if (task == null) {
-        ref.read(taskListProvider.notifier).addTask(result);
+        try {
+          await ref.read(taskListProvider.notifier).addTask(result);
+        } on ProFeatureLimitException catch (error) {
+          if (!context.mounted) return;
+          showWarningSnackBar(context, error.message);
+          context.push('/upgrade');
+        }
       } else {
-        ref.read(taskListProvider.notifier).updateTask(result);
+        await ref.read(taskListProvider.notifier).updateTask(result);
       }
     }
   }

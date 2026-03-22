@@ -1,8 +1,11 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/services/widget_bridge_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/data_export_service.dart';
 import '../../../core/utils/database_helper.dart';
@@ -10,6 +13,9 @@ import '../../../core/utils/provider_helpers.dart';
 import '../../../shared/utils/time_picker_helper.dart';
 import '../../../shared/utils/ui_helpers.dart';
 import '../../../shared/widgets/module_state_view.dart';
+import '../../todo/models/task_model.dart';
+import '../../todo/providers/todo_provider.dart';
+import '../../zen_mode/providers/zen_mode_provider.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -68,6 +74,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   Widget build(BuildContext context) {
     final ref = this.ref;
     final settingsAsync = ref.watch(settingsProvider);
+    final proState = ref.watch(proAccessProvider);
 
     return Scaffold(
       body: settingsAsync.when(
@@ -190,6 +197,41 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 ],
               ),
             ),
+            // Monetization section removed. Now handled as a separate Pro page.
+            const SizedBox(height: 32),
+            _buildSectionHeader(context, 'WIDGETS'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  _buildListTile(
+                    context,
+                    title: 'Home Screen Widgets',
+                    subtitle: _widgetStatusSubtitle(proState),
+                    icon: Icons.widgets_outlined,
+                    onTap: proState.hasValue && proState.value!
+                        ? null
+                        : () => context.push('/upgrade'),
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Widget Setup',
+                    subtitle:
+                        'Long-press home screen → Widgets → ZENiT Focus or ZENiT Tasks',
+                    icon: Icons.info_outline,
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Refresh Widget Content',
+                    subtitle: 'Re-publish current app state to widgets',
+                    icon: Icons.sync_outlined,
+                    onTap: () => _refreshWidgets(context, ref),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 32),
             _buildSectionHeader(context, 'SYSTEM'),
             const SizedBox(height: 16),
@@ -232,6 +274,36 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
         ),
       ),
     );
+  }
+
+  String _widgetStatusSubtitle(AsyncValue<bool> proState) {
+    if (!proState.hasValue) {
+      return 'Checking Pro entitlement...';
+    }
+
+    return proState.value!
+        ? 'Unlocked. Focus and Tasks widgets can display live data.'
+        : 'Locked in free plan. Upgrade to ZENiT Pro to unlock widgets.';
+  }
+
+  Future<void> _refreshWidgets(BuildContext context, WidgetRef ref) async {
+    final focusState = ref.read(zenTimerProvider);
+    final taskState = ref.read(allTaskListProvider);
+    final tasks = taskState.hasValue ? taskState.value! : <Task>[];
+    final canUseWidgets = ref
+        .read(proAccessProvider.notifier)
+        .ambientViewDecision()
+        .allowed;
+
+    await WidgetBridgeService.syncFromState(
+      canUseWidgets: canUseWidgets,
+      focusState: focusState,
+      tasks: tasks,
+    );
+
+    if (!context.mounted) return;
+
+    showSuccessSnackBar(context, 'Widget content refreshed.');
   }
 
   Future<void> _confirmDeleteAllData(

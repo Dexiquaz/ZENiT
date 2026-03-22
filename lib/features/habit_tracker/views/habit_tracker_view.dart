@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../../../shared/widgets/module_state_view.dart';
 import '../providers/habit_provider.dart';
 import '../widgets/add_habit_dialog.dart';
@@ -13,6 +15,10 @@ class HabitTrackerView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final habitState = ref.watch(habitListProvider);
+    final proNotifier = ref.read(proAccessProvider.notifier);
+    final habitCount = habitState.hasValue ? habitState.value!.length : 0;
+    final habitGateDecision = proNotifier.habitCreationDecision(habitCount);
+    final canCreateHabit = habitGateDecision.allowed;
 
     return Scaffold(
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -20,16 +26,20 @@ class HabitTrackerView extends ConsumerWidget {
         width: MediaQuery.of(context).size.width - 48,
         height: 50,
         child: FloatingActionButton.extended(
-          onPressed: () {
-            showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              useSafeArea: true,
-              builder: (context) => const AddHabitDialog(),
-            );
-          },
+          onPressed: canCreateHabit
+              ? () {
+                  showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    builder: (context) => const AddHabitDialog(),
+                  );
+                }
+              : () => context.push('/upgrade'),
           label: const Text('NEW HABIT'),
-          icon: const Icon(Icons.add),
+          icon: Icon(
+            canCreateHabit ? Icons.add : Icons.workspace_premium_outlined,
+          ),
         ),
       ),
       body: habitState.when(
@@ -152,8 +162,9 @@ class _HabitCardState extends ConsumerState<_HabitCard> {
                       Text(
                         widget.habit.category.toUpperCase(),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
+                          color: Theme.of(context).colorScheme.primary,
                           letterSpacing: 1.2,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -236,7 +247,9 @@ class _StatItem extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: Theme.of(context).colorScheme.outline,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../models/task_model.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/database_helper.dart';
@@ -70,6 +71,14 @@ class TaskNotifier extends AsyncNotifier<List<Task>> {
   }
 
   Future<void> addTask(Task task) async {
+    final existingTasks = await future;
+    final activeTaskCount = existingTasks
+        .where((item) => !item.completed)
+        .length;
+    await ref
+        .read(proAccessProvider.notifier)
+        .enforceTaskCreationLimit(activeTaskCount);
+
     final id = await _db.insertTask(task);
     await _syncTaskReminder(task.copyWith(id: id));
     ref.invalidateSelf();

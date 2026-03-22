@@ -15,14 +15,6 @@ import '../../zen_mode/widgets/zen_quick_sheet.dart';
 class DashboardView extends ConsumerWidget {
   const DashboardView({super.key});
 
-  bool _isLoadedAndEmpty<T>(AsyncValue<List<T>> state) {
-    return state.when(
-      data: (items) => items.isEmpty,
-      loading: () => false,
-      error: (_, __) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final habitState = ref.watch(habitListProvider);
@@ -30,12 +22,6 @@ class DashboardView extends ConsumerWidget {
     final journalState = ref.watch(journalProvider);
     final noteState = ref.watch(noteListProvider);
     final zenState = ref.watch(zenTimerProvider);
-
-    final isFirstRunEmptyState =
-        _isLoadedAndEmpty(habitState) &&
-        _isLoadedAndEmpty(taskState) &&
-        _isLoadedAndEmpty(journalState) &&
-        _isLoadedAndEmpty(noteState);
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -105,16 +91,13 @@ class DashboardView extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            if (isFirstRunEmptyState)
-              const _FirstRunModulesState()
-            else
-              _buildNavigationStack(
-                context,
-                habitState,
-                taskState,
-                journalState,
-                noteState,
-              ),
+            _buildNavigationStack(
+              context,
+              habitState,
+              taskState,
+              journalState,
+              noteState,
+            ),
           ],
         ),
       ),
@@ -367,67 +350,7 @@ class _ModuleButtonSkeleton extends StatelessWidget {
   }
 }
 
-class _FirstRunModulesState extends StatelessWidget {
-  const _FirstRunModulesState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.waving_hand_outlined,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Welcome to ZENiT',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Start by adding a task or creating a habit.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => context.go('/tasks'),
-                    icon: const Icon(Icons.add_task),
-                    label: const Text('ADD TASK'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => context.go('/habits'),
-                    icon: const Icon(Icons.track_changes_outlined),
-                    label: const Text('CREATE HABIT'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// Removed _FirstRunModulesState
 
 class _ModuleButton extends StatelessWidget {
   final String title;

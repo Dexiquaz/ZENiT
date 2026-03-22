@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/providers/pro_access_provider.dart';
 import '../../../core/providers/settings_provider.dart';
 import '../../../shared/widgets/module_state_view.dart';
 import '../../todo/models/task_model.dart';
@@ -24,6 +26,9 @@ class ZenModeView extends ConsumerWidget {
         : ref.watch(taskFocusStatsProvider(state.linkedTaskId!));
     final recentSessions = ref.watch(recentFocusSessionsProvider);
     final settingsState = ref.watch(settingsProvider);
+    final proNotifier = ref.read(proAccessProvider.notifier);
+    final ambientGateDecision = proNotifier.ambientViewDecision();
+    final canUseAmbientView = ambientGateDecision.allowed;
     final focusMinutes = state.focusDuration.inMinutes.clamp(1, 60).toInt();
     final breakMinutes = state.breakDuration.inMinutes.clamp(1, 30).toInt();
 
@@ -265,9 +270,15 @@ class ZenModeView extends ConsumerWidget {
                 ),
                 if (state.activeSessionId != null)
                   OutlinedButton.icon(
-                    onPressed: () => openZenAmbientView(context),
-                    icon: const Icon(Icons.flip),
-                    label: const Text('AMBIENT VIEW'),
+                    onPressed: canUseAmbientView
+                        ? () => openZenAmbientView(context)
+                        : () => context.push('/upgrade'),
+                    icon: Icon(
+                      canUseAmbientView ? Icons.flip : Icons.workspace_premium,
+                    ),
+                    label: Text(
+                      canUseAmbientView ? 'AMBIENT VIEW' : 'AMBIENT VIEW (PRO)',
+                    ),
                   ),
               ],
             ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/secure_storage_helper.dart';
 import '../services/notification_service.dart';
 
 enum ReminderTimeFormat { system, h12, h24 }
@@ -14,6 +14,7 @@ class UserSettings {
   final int focusDurationMinutes;
   final int breakDurationMinutes;
   final bool silentFocusNotifications;
+  final bool hasCompletedOnboarding;
 
   UserSettings({
     this.currency = r'$',
@@ -24,6 +25,7 @@ class UserSettings {
     this.focusDurationMinutes = 25,
     this.breakDurationMinutes = 5,
     this.silentFocusNotifications = true,
+    this.hasCompletedOnboarding = false,
   });
 
   TimeOfDay get journalReminderTime =>
@@ -38,6 +40,7 @@ class UserSettings {
     int? focusDurationMinutes,
     int? breakDurationMinutes,
     bool? silentFocusNotifications,
+    bool? hasCompletedOnboarding,
   }) {
     return UserSettings(
       currency: currency ?? this.currency,
@@ -50,6 +53,8 @@ class UserSettings {
       breakDurationMinutes: breakDurationMinutes ?? this.breakDurationMinutes,
       silentFocusNotifications:
           silentFocusNotifications ?? this.silentFocusNotifications,
+      hasCompletedOnboarding:
+          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
     );
   }
 
@@ -63,6 +68,7 @@ class UserSettings {
       'focusDurationMinutes': focusDurationMinutes,
       'breakDurationMinutes': breakDurationMinutes,
       'silentFocusNotifications': silentFocusNotifications,
+      'hasCompletedOnboarding': hasCompletedOnboarding,
     };
   }
 
@@ -78,6 +84,8 @@ class UserSettings {
     final rest = (map['breakDurationMinutes'] as num?)?.toInt() ?? 5;
     final silentFocusNotifications =
         (map['silentFocusNotifications'] as bool?) ?? true;
+    final hasCompletedOnboarding =
+        (map['hasCompletedOnboarding'] as bool?) ?? false;
 
     return UserSettings(
       currency: (map['currency'] as String?) ?? r'$',
@@ -89,6 +97,7 @@ class UserSettings {
       focusDurationMinutes: focus.clamp(1, 60).toInt(),
       breakDurationMinutes: rest.clamp(1, 30).toInt(),
       silentFocusNotifications: silentFocusNotifications,
+      hasCompletedOnboarding: hasCompletedOnboarding,
     );
   }
 }
@@ -107,24 +116,30 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   static const _breakDurationMinutesKey = 'setting_break_duration_minutes';
   static const _silentFocusNotificationsKey =
       'setting_silent_focus_notifications';
+  static const _hasCompletedOnboardingKey = 'setting_has_completed_onboarding';
 
   final _notifications = NotificationService.instance;
 
   @override
   Future<UserSettings> build() async {
-    final prefs = await SharedPreferences.getInstance();
-    final currency = prefs.getString(_currencyKey) ?? r'$';
+    final currency = await SecureStorageHelper.getString(_currencyKey) ?? r'$';
     final journalPromptEnabled =
-        prefs.getBool(_journalPromptEnabledKey) ?? true;
-    final journalReminderHour = prefs.getInt(_journalReminderHourKey) ?? 21;
-    final journalReminderMinute = prefs.getInt(_journalReminderMinuteKey) ?? 0;
+        await SecureStorageHelper.getBool(_journalPromptEnabledKey) ?? true;
+    final journalReminderHour =
+        await SecureStorageHelper.getInt(_journalReminderHourKey) ?? 21;
+    final journalReminderMinute =
+        await SecureStorageHelper.getInt(_journalReminderMinuteKey) ?? 0;
     final reminderTimeFormat = _parseTimeFormat(
-      prefs.getString(_reminderTimeFormatKey),
+      await SecureStorageHelper.getString(_reminderTimeFormatKey),
     );
-    final focusDurationMinutes = prefs.getInt(_focusDurationMinutesKey) ?? 25;
-    final breakDurationMinutes = prefs.getInt(_breakDurationMinutesKey) ?? 5;
+    final focusDurationMinutes =
+        await SecureStorageHelper.getInt(_focusDurationMinutesKey) ?? 25;
+    final breakDurationMinutes =
+        await SecureStorageHelper.getInt(_breakDurationMinutesKey) ?? 5;
     final silentFocusNotifications =
-        prefs.getBool(_silentFocusNotificationsKey) ?? true;
+        await SecureStorageHelper.getBool(_silentFocusNotificationsKey) ?? true;
+    final hasCompletedOnboarding =
+        await SecureStorageHelper.getBool(_hasCompletedOnboardingKey) ?? false;
 
     final settings = UserSettings(
       currency: currency,
@@ -135,6 +150,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
       focusDurationMinutes: focusDurationMinutes,
       breakDurationMinutes: breakDurationMinutes,
       silentFocusNotifications: silentFocusNotifications,
+      hasCompletedOnboarding: hasCompletedOnboarding,
     );
     await _syncJournalPrompt(settings);
 
@@ -142,16 +158,14 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> setCurrency(String c) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_currencyKey, c);
+    await SecureStorageHelper.setString(_currencyKey, c);
     if (state.hasValue) {
       state = AsyncData(state.value!.copyWith(currency: c));
     }
   }
 
   Future<void> setJournalPromptEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_journalPromptEnabledKey, enabled);
+    await SecureStorageHelper.setBool(_journalPromptEnabledKey, enabled);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(journalPromptEnabled: enabled);
@@ -160,9 +174,8 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> setJournalReminderTime(TimeOfDay time) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_journalReminderHourKey, time.hour);
-    await prefs.setInt(_journalReminderMinuteKey, time.minute);
+    await SecureStorageHelper.setInt(_journalReminderHourKey, time.hour);
+    await SecureStorageHelper.setInt(_journalReminderMinuteKey, time.minute);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(
@@ -174,8 +187,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> setReminderTimeFormat(ReminderTimeFormat format) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_reminderTimeFormatKey, format.name);
+    await SecureStorageHelper.setString(_reminderTimeFormatKey, format.name);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(reminderTimeFormat: format);
@@ -184,8 +196,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
 
   Future<void> setFocusDuration(int minutes) async {
     final clamped = minutes.clamp(1, 60).toInt();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_focusDurationMinutesKey, clamped);
+    await SecureStorageHelper.setInt(_focusDurationMinutesKey, clamped);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(focusDurationMinutes: clamped);
@@ -194,8 +205,7 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
 
   Future<void> setBreakDuration(int minutes) async {
     final clamped = minutes.clamp(1, 30).toInt();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_breakDurationMinutesKey, clamped);
+    await SecureStorageHelper.setInt(_breakDurationMinutesKey, clamped);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(breakDurationMinutes: clamped);
@@ -203,11 +213,18 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> setSilentFocusNotifications(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_silentFocusNotificationsKey, enabled);
+    await SecureStorageHelper.setBool(_silentFocusNotificationsKey, enabled);
 
     final current = state.hasValue ? state.value! : UserSettings();
     final updated = current.copyWith(silentFocusNotifications: enabled);
+    state = AsyncData(updated);
+  }
+
+  Future<void> setHasCompletedOnboarding(bool completed) async {
+    await SecureStorageHelper.setBool(_hasCompletedOnboardingKey, completed);
+
+    final current = state.hasValue ? state.value! : UserSettings();
+    final updated = current.copyWith(hasCompletedOnboarding: completed);
     state = AsyncData(updated);
   }
 
@@ -217,15 +234,15 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
   }
 
   Future<void> resetToDefaults() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_currencyKey);
-    await prefs.remove(_journalPromptEnabledKey);
-    await prefs.remove(_journalReminderHourKey);
-    await prefs.remove(_journalReminderMinuteKey);
-    await prefs.remove(_reminderTimeFormatKey);
-    await prefs.remove(_focusDurationMinutesKey);
-    await prefs.remove(_breakDurationMinutesKey);
-    await prefs.remove(_silentFocusNotificationsKey);
+    await SecureStorageHelper.remove(_currencyKey);
+    await SecureStorageHelper.remove(_journalPromptEnabledKey);
+    await SecureStorageHelper.remove(_journalReminderHourKey);
+    await SecureStorageHelper.remove(_journalReminderMinuteKey);
+    await SecureStorageHelper.remove(_reminderTimeFormatKey);
+    await SecureStorageHelper.remove(_focusDurationMinutesKey);
+    await SecureStorageHelper.remove(_breakDurationMinutesKey);
+    await SecureStorageHelper.remove(_silentFocusNotificationsKey);
+    await SecureStorageHelper.remove(_hasCompletedOnboardingKey);
 
     final defaults = UserSettings();
     state = AsyncData(defaults);
@@ -239,27 +256,39 @@ class SettingsNotifier extends AsyncNotifier<UserSettings> {
 
   Future<void> applyBackupMap(Map<String, dynamic> map) async {
     final restored = UserSettings.fromBackupMap(map);
-    final prefs = await SharedPreferences.getInstance();
 
-    await prefs.setString(_currencyKey, restored.currency);
-    await prefs.setBool(
+    await SecureStorageHelper.setString(_currencyKey, restored.currency);
+    await SecureStorageHelper.setBool(
       _journalPromptEnabledKey,
       restored.journalPromptEnabled,
     );
-    await prefs.setInt(_journalReminderHourKey, restored.journalReminderHour);
-    await prefs.setInt(
+    await SecureStorageHelper.setInt(
+      _journalReminderHourKey,
+      restored.journalReminderHour,
+    );
+    await SecureStorageHelper.setInt(
       _journalReminderMinuteKey,
       restored.journalReminderMinute,
     );
-    await prefs.setString(
+    await SecureStorageHelper.setString(
       _reminderTimeFormatKey,
       restored.reminderTimeFormat.name,
     );
-    await prefs.setInt(_focusDurationMinutesKey, restored.focusDurationMinutes);
-    await prefs.setInt(_breakDurationMinutesKey, restored.breakDurationMinutes);
-    await prefs.setBool(
+    await SecureStorageHelper.setInt(
+      _focusDurationMinutesKey,
+      restored.focusDurationMinutes,
+    );
+    await SecureStorageHelper.setInt(
+      _breakDurationMinutesKey,
+      restored.breakDurationMinutes,
+    );
+    await SecureStorageHelper.setBool(
       _silentFocusNotificationsKey,
       restored.silentFocusNotifications,
+    );
+    await SecureStorageHelper.setBool(
+      _hasCompletedOnboardingKey,
+      restored.hasCompletedOnboarding,
     );
 
     state = AsyncData(restored);

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
+
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  DateTime? lastBackPressed;
 
   String _getModuleName(int index) {
     switch (index) {
@@ -23,16 +31,18 @@ class AppShell extends ConsumerWidget {
         return 'NOTES';
       case 6:
         return 'SETTINGS';
+      case 7:
+        return 'PRO';
       default:
         return '';
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final navigationShell = widget.navigationShell;
     final currentIndex = navigationShell.currentIndex;
 
-    // Primary bottom nav destinations (Focus is a separate quick action)
     final bottomNavDestinations = const [
       ('Dashboard', Icons.dashboard_outlined, Icons.dashboard),
       ('Habits', Icons.track_changes_outlined, Icons.track_changes),
@@ -41,21 +51,41 @@ class AppShell extends ConsumerWidget {
       ('Notes', Icons.sticky_note_2_outlined, Icons.sticky_note_2),
     ];
 
-    // Map branch index <-> bottom nav visible index
-    const bottomNavBranchMap = [0, 2, 3, 4, 6];
+    const bottomNavBranchMap = [0, 2, 3, 4, 5];
 
     int getBottomNavIndex(int branchIndex) {
-      return bottomNavBranchMap.indexOf(branchIndex); // -1 if not in bottom nav
+      return bottomNavBranchMap.indexOf(branchIndex);
     }
 
     final bottomNavIndex = getBottomNavIndex(currentIndex);
 
     return PopScope(
-      canPop: currentIndex == 0,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        // Always handle back navigation manually
+        final navigationShell = widget.navigationShell;
+        final currentIndex = navigationShell.currentIndex;
         if (currentIndex != 0) {
-          navigationShell.goBranch(0); // Go to Dashboard
+          navigationShell.goBranch(0);
+          return;
+        }
+        final now = DateTime.now();
+        if (lastBackPressed == null ||
+            now.difference(lastBackPressed!) > const Duration(seconds: 2)) {
+          lastBackPressed = now;
+          ScaffoldMessenger.of(context).removeCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Press back again to exit'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return;
+        } else {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            SystemNavigator.pop();
+          });
+          return;
         }
       },
       child: Scaffold(
@@ -103,6 +133,17 @@ class AppShell extends ConsumerWidget {
               },
               icon: Icon(
                 currentIndex == 1 ? Icons.timer : Icons.timer_outlined,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Pro',
+              onPressed: () {
+                navigationShell.goBranch(7);
+              },
+              icon: Icon(
+                currentIndex == 7
+                    ? Icons.workspace_premium
+                    : Icons.workspace_premium_outlined,
               ),
             ),
             IconButton(
