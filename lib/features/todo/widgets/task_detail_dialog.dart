@@ -112,7 +112,6 @@ class _TaskDetailDialogState extends ConsumerState<TaskDetailDialog> {
                   child: SegmentedButton<TaskPriority>(
                     showSelectedIcon: false,
                     style: ButtonStyle(
-                      visualDensity: VisualDensity.compact,
                       textStyle: WidgetStatePropertyAll(
                         Theme.of(context).textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w700,

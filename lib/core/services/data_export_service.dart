@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import '../utils/database_helper.dart';
 import '../../features/habit_tracker/models/habit.dart';
 import '../../features/todo/models/task_model.dart';
-import '../../features/finance/models/transaction_model.dart';
 import '../../features/notes_shopping/models/models.dart';
 import '../../features/zen_mode/models/focus_session.dart';
 
@@ -42,9 +41,7 @@ class DataExportService {
       final habits = await _db.getHabits();
       final tasks = await _db.getTasks();
       final projects = await _db.getProjects();
-      final transactions = await _db.getTransactions();
       final notes = await _db.getNotes();
-      final shoppingItems = await _db.getShoppingItems();
       final journalEntries = await _db.getAllJournalEntries();
       final focusSessions = await _db.getFocusSessions();
 
@@ -59,9 +56,8 @@ class DataExportService {
           'projects': projects
               .map((p) => {'id': p.id, 'name': p.name})
               .toList(),
-          'transactions': transactions.map((t) => t.toMap()).toList(),
           'notes': notes.map((n) => n.toMap()).toList(),
-          'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(),
+          // 'shoppingItems': shoppingItems.map((s) => s.toMap()).toList(), // Shopping now handled via notes
           'journalEntries': journalEntries.map((j) => j.toMap()).toList(),
           'focusSessions': focusSessions
               .map((session) => session.toMap())
@@ -227,25 +223,6 @@ class DataExportService {
         projects.map((p) => [p.id.toString(), _escapeCsv(p.name)]).toList(),
       );
 
-      // Export transactions
-      final transactions = await _db.getTransactions();
-      await _writeCsvFile(
-        '${exportDir.path}/transactions.csv',
-        ['id', 'description', 'amount', 'category', 'is_income', 'date'],
-        transactions
-            .map(
-              (t) => [
-                t.id?.toString() ?? '',
-                _escapeCsv(t.description),
-                t.amount.toString(),
-                _escapeCsv(t.category),
-                t.isIncome ? '1' : '0',
-                t.date.toIso8601String(),
-              ],
-            )
-            .toList(),
-      );
-
       // Export notes
       final notes = await _db.getNotes();
       await _writeCsvFile(
@@ -265,23 +242,7 @@ class DataExportService {
             .toList(),
       );
 
-      // Export shopping items
-      final shoppingItems = await _db.getShoppingItems();
-      await _writeCsvFile(
-        '${exportDir.path}/shopping_items.csv',
-        ['id', 'name', 'quantity', 'category', 'checked'],
-        shoppingItems
-            .map(
-              (s) => [
-                s.id?.toString() ?? '',
-                _escapeCsv(s.name),
-                s.quantity.toString(),
-                _escapeCsv(s.category),
-                s.checked ? '1' : '0',
-              ],
-            )
-            .toList(),
-      );
+      // Shopping items export removed; handled via notes
 
       // Export journal entries
       final now = DateTime.now();
@@ -422,23 +383,6 @@ class DataExportService {
         }
       }
 
-      // Import transactions
-      final transactionsData =
-          importData['transactions'] as List<dynamic>? ?? [];
-      for (final t in transactionsData) {
-        if (t is! Map<String, dynamic>) continue;
-        final transaction = Transaction.fromMap(t);
-        await _db.insertTransaction(
-          Transaction(
-            description: transaction.description,
-            amount: transaction.amount,
-            category: transaction.category,
-            isIncome: transaction.isIncome,
-            date: transaction.date,
-          ),
-        );
-      }
-
       // Import notes
       final notesData = importData['notes'] as List<dynamic>? ?? [];
       for (final n in notesData) {
@@ -447,13 +391,7 @@ class DataExportService {
         await _db.insertNote(note.copyWith(id: null));
       }
 
-      // Import shopping items
-      final shoppingData = importData['shoppingItems'] as List<dynamic>? ?? [];
-      for (final s in shoppingData) {
-        if (s is! Map<String, dynamic>) continue;
-        final item = ShoppingItem.fromMap(s);
-        await _db.insertShoppingItem(item.copyWith(id: null));
-      }
+      // Shopping items import removed; handled via notes
 
       // Import journal entries
       final journalData = importData['journalEntries'] as List<dynamic>? ?? [];

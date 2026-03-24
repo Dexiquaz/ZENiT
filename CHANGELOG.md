@@ -2,13 +2,44 @@
 
 All notable changes to ZENiT are documented in this file.
 
+## [1.3.2] - 2026-03-21
+
+### Added
+- Pro-locked home widget pipeline for Focus and Tasks with centralized bridge sync.
+- Settings → Widgets management section with lock state, setup guidance, and manual refresh action.
+- Entitlement reconciliation path on startup and app resume to tighten Pro state consistency.
+
+### Changed
+- Centralized Pro gate decisions for feature access checks and free-tier cap enforcement.
+- Widget payload behavior now fails closed to locked state when entitlement or sync is unavailable.
+
+### Fixed
+- Prevented startup crash on unsupported `home_widget` platform channels by guarding `setAppGroupId` and handling plugin exceptions safely.
+
+## [1.3.1] - 2026-03-20
+
+### Added
+- Initial in-app monetization foundation using Flutter `in_app_purchase`.
+- New ZENiT Pro entitlement provider with local unlock persistence and purchase/restore stream handling.
+- New Upgrade screen with localized store price loading, lifetime purchase CTA, and restore purchases action.
+
+### Changed
+- Added Settings → Monetization section with ZENiT Pro status and upgrade entry.
+- Added dedicated `/upgrade` route for paywall navigation.
+- Gated Focus Ambient View behind ZENiT Pro with direct upgrade CTA when locked.
+- Added free-tier creation caps (5 habits, 10 active tasks) with provider-level enforcement.
+- Added upgrade redirection and warning feedback when users hit free-tier creation limits.
+
+### Platform
+- Added Android billing permission (`com.android.vending.BILLING`) for Google Play purchases.
+
 ## [1.3.0] - 2026-03-14
 
 ### Added
 - AMOLED-style Focus Ambient View with immersive full-screen presentation, drifted clock layout, and quick controls.
 - Direct Ambient View launch from both the main Focus screen and Zen quick sheet.
 - Silent Focus setting to suppress scheduled app reminders while a focus session is active.
-- Reminder resync flow after focus suppression is lifted (tasks, habits, bills, and journal prompt reminders).
+- Reminder resync flow after focus suppression is lifted (tasks, habits, and journal prompt reminders).
 - Shared module state components for consistent empty, loading, and error UI patterns.
 - Inline state components for compact in-card async feedback (loader and error with optional retry).
 - Task-level focus stats surfaced in both Tasks and Focus (today minutes and weekly cycles).

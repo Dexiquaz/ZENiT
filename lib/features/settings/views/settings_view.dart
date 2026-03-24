@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/services/widget_bridge_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/services/data_export_service.dart';
 import '../../../core/utils/database_helper.dart';
@@ -11,6 +13,9 @@ import '../../../core/utils/provider_helpers.dart';
 import '../../../shared/utils/time_picker_helper.dart';
 import '../../../shared/utils/ui_helpers.dart';
 import '../../../shared/widgets/module_state_view.dart';
+import '../../todo/models/task_model.dart';
+import '../../todo/providers/todo_provider.dart';
+import '../../zen_mode/providers/zen_mode_provider.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -69,179 +74,236 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   Widget build(BuildContext context) {
     final ref = this.ref;
     final settingsAsync = ref.watch(settingsProvider);
+    final proState = ref.watch(proAccessProvider);
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        context.go('/');
-      },
-      child: Scaffold(
-        body: settingsAsync.when(
-          data: (settings) => ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              _buildSectionHeader(context, 'PREFERENCES'),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    _buildListTile(
-                      context,
-                      title: 'Currency Symbol',
-                      subtitle: 'Current: ${settings.currency}',
-                      icon: Icons.payments_outlined,
-                      onTap: () =>
-                          _showCurrencyPicker(context, ref, settings.currency),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader(context, 'REMINDERS'),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    SwitchListTile.adaptive(
-                      title: const Text('Daily Journal Prompt'),
-                      subtitle: const Text('Keep a nightly reflection cadence'),
-                      value: settings.journalPromptEnabled,
-                      onChanged: (value) {
-                        ref
-                            .read(settingsProvider.notifier)
-                            .setJournalPromptEnabled(value);
-                      },
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Notification Permission',
-                      subtitle: _checkingPermission
-                          ? 'Checking...'
-                          : _permissionLabel(_permissionStatus),
-                      icon: Icons.notifications_active_outlined,
-                      onTap: () async {
-                        if (_permissionStatus ==
-                                NotificationPermissionStatus.denied ||
-                            _permissionStatus ==
-                                NotificationPermissionStatus.unknown) {
-                          await _requestNotificationPermission(context);
-                        } else {
-                          await _refreshPermissionStatus();
-                        }
-                      },
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Default Reminder Time',
-                      subtitle: _formatTimeForSettings(context, settings),
-                      icon: Icons.schedule_outlined,
-                      onTap: settings.journalPromptEnabled
-                          ? () =>
-                                _pickJournalReminderTime(context, ref, settings)
-                          : null,
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Time Format',
-                      subtitle: _timeFormatLabel(settings.reminderTimeFormat),
-                      icon: Icons.access_time_filled_outlined,
-                      onTap: () => _showTimeFormatPicker(
-                        context,
-                        ref,
-                        settings.reminderTimeFormat,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader(context, 'DATA'),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    _buildListTile(
-                      context,
-                      title: 'Local-Only Storage',
-                      subtitle:
-                          'Data stays on this device unless you export it.',
-                      icon: Icons.shield_outlined,
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Export Data (JSON)',
-                      subtitle: 'Save all your data to a JSON file.',
-                      icon: Icons.download_outlined,
-                      onTap: () => _exportDataJson(context, ref),
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Import Data',
-                      subtitle: 'Restore data from a JSON export file.',
-                      icon: Icons.upload_outlined,
-                      onTap: () => _importData(context, ref),
-                    ),
-                    dividerListTile,
-                    _buildListTile(
-                      context,
-                      title: 'Delete All Data',
-                      subtitle:
-                          'Permanently erase tasks, habits, notes, journal, and finance logs.',
-                      icon: Icons.delete_forever_outlined,
-                      onTap: () => _confirmDeleteAllData(context, ref),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              _buildSectionHeader(context, 'SYSTEM'),
-              const SizedBox(height: 16),
-              Card(
-                child: Column(
-                  children: [
-                    _buildListTile(
-                      context,
-                      title: 'Version',
-                      subtitle: _appVersion.isEmpty
-                          ? 'Loading...'
-                          : _appVersion,
-                      icon: Icons.info_outline,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 48),
-              Center(
-                child: Text(
-                  'ZENiT // PRIVATE BY DEFAULT',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.3),
-                    letterSpacing: 2.0,
+    return Scaffold(
+      body: settingsAsync.when(
+        data: (settings) => ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            _buildSectionHeader(context, 'PREFERENCES'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  _buildListTile(
+                    context,
+                    title: 'Currency Symbol',
+                    subtitle: 'Current: ${settings.currency}',
+                    icon: Icons.payments_outlined,
+                    onTap: () =>
+                        _showCurrencyPicker(context, ref, settings.currency),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildSectionHeader(context, 'REMINDERS'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile.adaptive(
+                    title: const Text('Daily Journal Prompt'),
+                    subtitle: const Text('Keep a nightly reflection cadence'),
+                    value: settings.journalPromptEnabled,
+                    onChanged: (value) {
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setJournalPromptEnabled(value);
+                    },
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Notification Permission',
+                    subtitle: _checkingPermission
+                        ? 'Checking...'
+                        : _permissionLabel(_permissionStatus),
+                    icon: Icons.notifications_active_outlined,
+                    onTap: () async {
+                      if (_permissionStatus ==
+                              NotificationPermissionStatus.denied ||
+                          _permissionStatus ==
+                              NotificationPermissionStatus.unknown) {
+                        await _requestNotificationPermission(context);
+                      } else {
+                        await _refreshPermissionStatus();
+                      }
+                    },
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Default Reminder Time',
+                    subtitle: _formatTimeForSettings(context, settings),
+                    icon: Icons.schedule_outlined,
+                    onTap: settings.journalPromptEnabled
+                        ? () => _pickJournalReminderTime(context, ref, settings)
+                        : null,
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Time Format',
+                    subtitle: _timeFormatLabel(settings.reminderTimeFormat),
+                    icon: Icons.access_time_filled_outlined,
+                    onTap: () => _showTimeFormatPicker(
+                      context,
+                      ref,
+                      settings.reminderTimeFormat,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildSectionHeader(context, 'DATA'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  _buildListTile(
+                    context,
+                    title: 'Local-Only Storage',
+                    subtitle: 'Data stays on this device unless you export it.',
+                    icon: Icons.shield_outlined,
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Export Data (JSON)',
+                    subtitle: 'Save all your data to a JSON file.',
+                    icon: Icons.download_outlined,
+                    onTap: () => _exportDataJson(context, ref),
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Import Data',
+                    subtitle: 'Restore data from a JSON export file.',
+                    icon: Icons.upload_outlined,
+                    onTap: () => _importData(context, ref),
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Delete All Data',
+                    subtitle:
+                        'Permanently erase tasks, habits, notes, shopping items, and journal entries.',
+                    icon: Icons.delete_forever_outlined,
+                    onTap: () => _confirmDeleteAllData(context, ref),
+                  ),
+                ],
+              ),
+            ),
+            // Monetization section removed. Now handled as a separate Pro page.
+            const SizedBox(height: 32),
+            _buildSectionHeader(context, 'WIDGETS'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  _buildListTile(
+                    context,
+                    title: 'Home Screen Widgets',
+                    subtitle: _widgetStatusSubtitle(proState),
+                    icon: Icons.widgets_outlined,
+                    onTap: proState.hasValue && proState.value!
+                        ? null
+                        : () => context.push('/upgrade'),
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Widget Setup',
+                    subtitle:
+                        'Long-press home screen → Widgets → ZENiT Focus or ZENiT Tasks',
+                    icon: Icons.info_outline,
+                  ),
+                  dividerListTile,
+                  _buildListTile(
+                    context,
+                    title: 'Refresh Widget Content',
+                    subtitle: 'Re-publish current app state to widgets',
+                    icon: Icons.sync_outlined,
+                    onTap: () => _refreshWidgets(context, ref),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildSectionHeader(context, 'SYSTEM'),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  _buildListTile(
+                    context,
+                    title: 'Version',
+                    subtitle: _appVersion.isEmpty ? 'Loading...' : _appVersion,
+                    icon: Icons.info_outline,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 48),
+            Center(
+              child: Text(
+                'ZENiT // PRIVATE BY DEFAULT',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.3),
+                  letterSpacing: 2.0,
                 ),
               ),
-            ],
-          ),
-          loading: () => const ModuleLoadingState(
-            title: 'Loading settings',
-            subtitle: 'Preparing your preferences.',
-          ),
-          error: (_, __) => ModuleErrorState(
-            title: 'Could not load settings',
-            subtitle: 'Please try refreshing settings.',
-            onRetry: () => ref.invalidate(settingsProvider),
-          ),
+            ),
+          ],
+        ),
+        loading: () => const ModuleCardListSkeleton(
+          itemCount: 5,
+          horizontalPadding: 24,
+          topPadding: 24,
+          bottomPadding: 48,
+        ),
+        error: (_, __) => ModuleErrorState(
+          title: 'Could not load settings',
+          subtitle: 'Please try refreshing settings.',
+          onRetry: () => ref.invalidate(settingsProvider),
         ),
       ),
     );
+  }
+
+  String _widgetStatusSubtitle(AsyncValue<bool> proState) {
+    if (!proState.hasValue) {
+      return 'Checking Pro entitlement...';
+    }
+
+    return proState.value!
+        ? 'Unlocked. Focus and Tasks widgets can display live data.'
+        : 'Locked in free plan. Upgrade to ZENiT Pro to unlock widgets.';
+  }
+
+  Future<void> _refreshWidgets(BuildContext context, WidgetRef ref) async {
+    final focusState = ref.read(zenTimerProvider);
+    final taskState = ref.read(allTaskListProvider);
+    final tasks = taskState.hasValue ? taskState.value! : <Task>[];
+    final canUseWidgets = ref
+        .read(proAccessProvider.notifier)
+        .ambientViewDecision()
+        .allowed;
+
+    await WidgetBridgeService.syncFromState(
+      canUseWidgets: canUseWidgets,
+      focusState: focusState,
+      tasks: tasks,
+    );
+
+    if (!context.mounted) return;
+
+    showSuccessSnackBar(context, 'Widget content refreshed.');
   }
 
   Future<void> _confirmDeleteAllData(
@@ -253,7 +315,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
       builder: (ctx) => AlertDialog(
         title: const Text('DELETE ALL DATA?'),
         content: const Text(
-          'This permanently erases all local data, including habits, tasks, finance logs, notes, shopping items, and journal entries.',
+          'This permanently erases all local data, including habits, tasks, notes, shopping items, and journal entries.',
         ),
         actions: [
           TextButton(
@@ -600,11 +662,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'WARNING: This will replace all current data with the imported data.',
-              style: TextStyle(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: Colors.orange,
+                color: Theme.of(context).colorScheme.tertiary,
               ),
             ),
             const SizedBox(height: 16),

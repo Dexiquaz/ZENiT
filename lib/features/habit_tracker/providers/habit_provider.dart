@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/pro_access_provider.dart';
 import '../models/habit.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/database_helper.dart';
@@ -25,6 +26,11 @@ class HabitNotifier extends AsyncNotifier<List<Habit>> {
   }
 
   Future<void> addHabit(Habit habit) async {
+    final existingHabits = await future;
+    await ref
+        .read(proAccessProvider.notifier)
+        .enforceHabitCreationLimit(existingHabits.length);
+
     final id = await _dbHelper.insertHabit(habit);
     await _syncHabitReminder(habit.copyWith(id: id));
     ref.invalidateSelf();

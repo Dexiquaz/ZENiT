@@ -241,3 +241,152 @@ class ModuleInlineErrorState extends StatelessWidget {
     );
   }
 }
+
+class ModuleSkeletonBlock extends StatelessWidget {
+  final double? width;
+  final double height;
+  final double radius;
+
+  const ModuleSkeletonBlock({
+    super.key,
+    this.width,
+    required this.height,
+    this.radius = 10,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Theme.of(
+            context,
+          ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+}
+
+class ModuleChipRowSkeleton extends StatelessWidget {
+  final int chipCount;
+
+  const ModuleChipRowSkeleton({super.key, this.chipCount = 4});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      itemBuilder: (_, index) {
+        return ModuleSkeletonBlock(
+          width: index == chipCount - 1 ? 108 : 78,
+          height: 32,
+          radius: 16,
+        );
+      },
+      separatorBuilder: (_, __) => const SizedBox(width: 8),
+      itemCount: chipCount,
+    );
+  }
+}
+
+class ModuleCardListSkeleton extends StatelessWidget {
+  final int itemCount;
+  final double horizontalPadding;
+  final double topPadding;
+  final double bottomPadding;
+
+  const ModuleCardListSkeleton({
+    super.key,
+    this.itemCount = 5,
+    this.horizontalPadding = 16,
+    this.topPadding = 8,
+    this.bottomPadding = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        topPadding,
+        horizontalPadding,
+        bottomPadding,
+      ),
+      itemBuilder: (_, __) {
+        return Card(
+          elevation: 0,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                ModuleSkeletonBlock(width: 120, height: 12, radius: 6),
+                SizedBox(height: 12),
+                ModuleSkeletonBlock(height: 16),
+                SizedBox(height: 10),
+                ModuleSkeletonBlock(width: 210, height: 12, radius: 6),
+              ],
+            ),
+          ),
+        );
+      },
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemCount: itemCount,
+    );
+  }
+}
+
+class ModuleGridSkeleton extends StatelessWidget {
+  final int itemCount;
+  final int crossAxisCount;
+  final double padding;
+  final double mainAxisSpacing;
+  final double crossAxisSpacing;
+  final double childAspectRatio;
+
+  const ModuleGridSkeleton({
+    super.key,
+    this.itemCount = 6,
+    this.crossAxisCount = 2,
+    this.padding = 24,
+    this.mainAxisSpacing = 16,
+    this.crossAxisSpacing = 16,
+    this.childAspectRatio = 0.85,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      padding: EdgeInsets.fromLTRB(padding, padding, padding, 110),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        mainAxisSpacing: mainAxisSpacing,
+        crossAxisSpacing: crossAxisSpacing,
+        childAspectRatio: childAspectRatio,
+      ),
+      itemCount: itemCount,
+      itemBuilder: (_, __) => Card(
+        elevation: 0,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              ModuleSkeletonBlock(height: 14, radius: 7),
+              SizedBox(height: 10),
+              Expanded(child: ModuleSkeletonBlock(height: double.infinity)),
+              SizedBox(height: 10),
+              ModuleSkeletonBlock(width: 60, height: 10, radius: 6),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

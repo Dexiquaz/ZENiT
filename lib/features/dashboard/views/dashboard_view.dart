@@ -2,17 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/utils/date_utils.dart';
+import '../../../shared/widgets/module_state_view.dart';
 import '../../habit_tracker/providers/habit_provider.dart';
 import '../../habit_tracker/models/habit.dart';
 import '../../todo/providers/todo_provider.dart';
 import '../../todo/models/task_model.dart';
-import '../../finance/providers/finance_provider.dart';
-import '../../finance/models/transaction_model.dart';
 import '../../notes_shopping/providers/notes_provider.dart';
 import '../../notes_shopping/models/models.dart';
 import '../../zen_mode/providers/zen_mode_provider.dart';
 import '../../zen_mode/widgets/zen_quick_sheet.dart';
-import '../../../core/theme/app_colors.dart';
 
 class DashboardView extends ConsumerWidget {
   const DashboardView({super.key});
@@ -21,8 +19,8 @@ class DashboardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final habitState = ref.watch(habitListProvider);
     final taskState = ref.watch(taskListProvider);
-    final financeState = ref.watch(transactionListProvider);
     final journalState = ref.watch(journalProvider);
+    final noteState = ref.watch(noteListProvider);
     final zenState = ref.watch(zenTimerProvider);
 
     return Scaffold(
@@ -94,11 +92,11 @@ class DashboardView extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             _buildNavigationStack(
+              context,
               habitState,
               taskState,
-              financeState,
               journalState,
-              ref,
+              noteState,
             ),
           ],
         ),
@@ -107,13 +105,12 @@ class DashboardView extends ConsumerWidget {
   }
 
   Widget _buildNavigationStack(
+    BuildContext context,
     AsyncValue<List<Habit>> habitState,
     AsyncValue<List<Task>> taskState,
-    AsyncValue<List<Transaction>> financeState,
     AsyncValue<List<JournalEntry>> journalState,
-    WidgetRef ref,
+    AsyncValue<List<Note>> noteState,
   ) {
-    final noteState = ref.watch(noteListProvider);
     return Column(
       children: [
         habitState.when(
@@ -132,21 +129,17 @@ class DashboardView extends ConsumerWidget {
               summaryValue: '$completedTodayCount / ${habits.length}',
               summarySubtitle: 'today',
               details: habits.isEmpty
-                  ? const Text('No habits yet. add your first habit')
+                  ? const Text('No habits yet. Add your first habit')
                   : hasPending
                   ? Text(
                       'Pending: ${pending.take(2).map((h) => h.title).join(', ')}${pending.length > 2 ? '...' : ''}',
                     )
-                  : const Text('All daily protocols completed.'),
+                  : const Text('All daily habits completed.'),
             );
           },
-          loading: () => _ModuleButton(
+          loading: () => const _ModuleButtonSkeleton(
             title: 'HABITS',
-            icon: Icons.sync,
-            navigationPath: '/habits',
-            summaryValue: '...',
-            summarySubtitle: 'loading',
-            details: const Text('Loading habit activity...'),
+            icon: Icons.track_changes_outlined,
           ),
           error: (_, __) => _ModuleButton(
             title: 'HABITS',
@@ -192,10 +185,12 @@ class DashboardView extends ConsumerWidget {
                           .map(
                             (t) => Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.circle,
                                   size: 4,
-                                  color: AppColors.textSecondary,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
@@ -212,13 +207,9 @@ class DashboardView extends ConsumerWidget {
                     ),
             );
           },
-          loading: () => _ModuleButton(
+          loading: () => const _ModuleButtonSkeleton(
             title: 'TASKS',
-            icon: Icons.sync,
-            navigationPath: '/tasks',
-            summaryValue: '...',
-            summarySubtitle: 'loading',
-            details: const Text('Loading task queue...'),
+            icon: Icons.checklist_rtl_outlined,
           ),
           error: (_, __) => _ModuleButton(
             title: 'TASKS',
@@ -247,13 +238,9 @@ class DashboardView extends ConsumerWidget {
                   )
                 : const Text('No data entry for the current cycle.'),
           ),
-          loading: () => _ModuleButton(
+          loading: () => const _ModuleButtonSkeleton(
             title: 'CALENDAR',
-            icon: Icons.sync,
-            navigationPath: '/calendar',
-            summaryValue: '...',
-            summarySubtitle: 'loading',
-            details: const Text('Loading journal entries...'),
+            icon: Icons.calendar_month_outlined,
           ),
           error: (_, __) => _ModuleButton(
             title: 'CALENDAR',
@@ -262,55 +249,6 @@ class DashboardView extends ConsumerWidget {
             summaryValue: 'ERR',
             summarySubtitle: 'issue',
             details: const Text('Could not load calendar. Tap to open module.'),
-          ),
-        ),
-        const SizedBox(height: 16),
-        financeState.when(
-          data: (txs) {
-            final balance = txs.fold<double>(
-              0,
-              (sum, t) => t.isIncome ? sum + t.amount : sum - t.amount,
-            );
-            final recent = txs.take(2).toList();
-            return _ModuleButton(
-              title: 'FINANCE',
-              icon: Icons.account_balance_wallet_outlined,
-              navigationPath: '/finance',
-              summaryValue: balance.toStringAsFixed(0),
-              summarySubtitle: 'net assets',
-              details: recent.isEmpty
-                  ? const Text('No recent transaction logs.')
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: recent
-                          .map(
-                            (t) => Text(
-                              '${t.isIncome ? '+' : '-'}${t.amount} (${t.category})',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          )
-                          .toList(),
-                    ),
-            );
-          },
-          loading: () => _ModuleButton(
-            title: 'FINANCE',
-            icon: Icons.sync,
-            navigationPath: '/finance',
-            summaryValue: '...',
-            summarySubtitle: 'loading',
-            details: const Text('Loading finance snapshot...'),
-          ),
-          error: (_, __) => _ModuleButton(
-            title: 'FINANCE',
-            icon: Icons.error_outline,
-            navigationPath: '/finance',
-            summaryValue: 'ERR',
-            summarySubtitle: 'issue',
-            details: const Text(
-              'Could not load finance data. Tap to open module.',
-            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -331,13 +269,9 @@ class DashboardView extends ConsumerWidget {
                     ),
             );
           },
-          loading: () => _ModuleButton(
+          loading: () => const _ModuleButtonSkeleton(
             title: 'NOTES',
-            icon: Icons.sync,
-            navigationPath: '/notes',
-            summaryValue: '...',
-            summarySubtitle: 'loading',
-            details: const Text('Loading notes archive...'),
+            icon: Icons.sticky_note_2_outlined,
           ),
           error: (_, __) => _ModuleButton(
             title: 'NOTES',
@@ -352,6 +286,71 @@ class DashboardView extends ConsumerWidget {
     );
   }
 }
+
+class _ModuleButtonSkeleton extends StatelessWidget {
+  final String title;
+  final IconData icon;
+
+  const _ModuleButtonSkeleton({required this.title, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Row(
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 32,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(
+                    alpha: 0.55,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 24),
+            Container(
+              width: 1,
+              height: 48,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.1),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ModuleSkeletonBlock(width: 96, height: 22, radius: 8),
+                  SizedBox(height: 10),
+                  ModuleSkeletonBlock(height: 10, radius: 5),
+                  SizedBox(height: 8),
+                  ModuleSkeletonBlock(width: 150, height: 10, radius: 5),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Removed _FirstRunModulesState
 
 class _ModuleButton extends StatelessWidget {
   final String title;

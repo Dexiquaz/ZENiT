@@ -30,57 +30,6 @@ class NoteNotifier extends AsyncNotifier<List<Note>> {
   }
 }
 
-final shoppingListProvider =
-    AsyncNotifierProvider<ShoppingNotifier, List<ShoppingItem>>(
-      ShoppingNotifier.new,
-    );
-
-class ShoppingNotifier extends AsyncNotifier<List<ShoppingItem>> {
-  final _db = DatabaseHelper();
-  @override
-  Future<List<ShoppingItem>> build() async => _db.getShoppingItems();
-
-  Future<void> addItem(ShoppingItem s) async {
-    await _db.insertShoppingItem(s);
-    ref.invalidateSelf();
-    await future;
-  }
-
-  Future<void> toggleItem(ShoppingItem s) async {
-    await _db.updateShoppingItem(
-      ShoppingItem(
-        id: s.id,
-        name: s.name,
-        quantity: s.quantity,
-        category: s.category,
-        checked: !s.checked,
-      ),
-    );
-    ref.invalidateSelf();
-    await future;
-  }
-
-  Future<void> updateQuantity(ShoppingItem s, int qty) async {
-    await _db.updateShoppingItem(
-      ShoppingItem(
-        id: s.id,
-        name: s.name,
-        quantity: qty,
-        category: s.category,
-        checked: s.checked,
-      ),
-    );
-    ref.invalidateSelf();
-    await future;
-  }
-
-  Future<void> deleteItem(int id) async {
-    await _db.deleteShoppingItem(id);
-    ref.invalidateSelf();
-    await future;
-  }
-}
-
 final journalProvider =
     AsyncNotifierProvider<JournalNotifier, List<JournalEntry>>(
       JournalNotifier.new,
